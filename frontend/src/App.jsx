@@ -1,14 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import AntColonyControls from './AntColonyControls';
+import FireflyControls from './FireflyControls';
+import GeneticControls from './GeneticControls';
+import PsoControls from './PsoControls';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
 const CELL_SIZE = 24;
+const ALGORITHMS = [
+  { id: 'pso', label: 'Particle Swarm' },
+  { id: 'genetic', label: 'Genetic Algorithm' },
+  { id: 'firefly', label: 'Firefly Algorithm' },
+  { id: 'ant', label: 'Ant Colony' },
+];
+const ALGORITHM_LABELS = {
+  pso: 'Particle Swarm Optimization',
+  genetic: 'Genetic Algorithm',
+  firefly: 'Firefly Algorithm',
+  ant: 'Ant Colony Optimization',
+};
 
 function App() {
   const canvasRef = useRef(null);
   const [maze, setMaze] = useState([]);
   const [history, setHistory] = useState([]);
   const [solution, setSolution] = useState(null);
+  const [activeAlgorithm, setActiveAlgorithm] = useState('pso');
   const MIN_SIZE = 15;
   const MAX_SIZE = 100;
 
@@ -33,6 +50,28 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [speedMs, setSpeedMs] = useState(100);
+  const algorithmDisplay = ALGORITHM_LABELS[activeAlgorithm];
+  const isPsoActive = activeAlgorithm === 'pso';
+
+  const renderAlgorithmControls = () => {
+    if (activeAlgorithm === 'pso') {
+      return (
+        <PsoControls
+          iterations={iterations}
+          swarmSize={swarmSize}
+          onIterationsChange={setIterations}
+          onSwarmSizeChange={setSwarmSize}
+        />
+      );
+    }
+    if (activeAlgorithm === 'genetic') {
+      return <GeneticControls />;
+    }
+    if (activeAlgorithm === 'firefly') {
+      return <FireflyControls />;
+    }
+    return <AntColonyControls />;
+  };
 
   const activeFrame = useMemo(() => {
     if (history.length === 0) {
@@ -198,7 +237,7 @@ function App() {
     }
   };
 
-  const fetchSolution = async (
+  const fetchPsoSolution = async (
     sizeOverride = desiredSize,
     seedOverride = mazeSeed,
     iterationsOverride = iterations,
@@ -236,6 +275,10 @@ function App() {
   };
 
   const handleStart = async () => {
+    if (!isPsoActive) {
+      setError(`${algorithmDisplay} visualisation is coming soon.`);
+      return;
+    }
     if (desiredSize < MIN_SIZE || desiredSize > MAX_SIZE || desiredSize % 5 !== 0) {
       setError(`Maze size must be a multiple of 5 between ${MIN_SIZE} and ${MAX_SIZE}.`);
       return;
@@ -244,6 +287,7 @@ function App() {
       setError('Iterations and swarm size must be positive integers.');
       return;
     }
+    setError('');
     let seed = mazeSeed;
     if (seed === null) {
       seed = await fetchMaze(desiredSize);
@@ -251,7 +295,7 @@ function App() {
     if (seed === null || seed === undefined) {
       return;
     }
-    fetchSolution(desiredSize, seed, iterations, swarmSize);
+    fetchPsoSolution(desiredSize, seed, iterations, swarmSize);
   };
 
   const handleStop = () => {
@@ -300,11 +344,33 @@ function App() {
     }
   }, [desiredSize]);
 
+  useEffect(() => {
+    setIsRunning(false);
+    setHistory([]);
+    setSolution(null);
+    setCurrentStep(0);
+    setFrameProgress(0);
+    setError('');
+  }, [activeAlgorithm]);
+
   return (
     <div className="app">
       <header>
         <h1>Maze Solver Visualiser</h1>
       </header>
+
+      <div className="algorithm-selector">
+        {ALGORITHMS.map((algo) => (
+          <button
+            key={algo.id}
+            type="button"
+            className={algo.id === activeAlgorithm ? 'active' : ''}
+            onClick={() => setActiveAlgorithm(algo.id)}
+          >
+            {algo.label}
+          </button>
+        ))}
+      </div>
 
       <div className="controls">
         <div className="size-control">
@@ -357,6 +423,7 @@ function App() {
         <div className="details">
           <h2>Playback Details</h2>
           <ul>
+            <li>Algorithm: {algorithmDisplay}</li>
             <li>Maze size: {mazeSize ?? (maze.length ? `${maze.length} x ${maze[0].length}` : '-')}</li>
             <li>Particles tracked: {activeParticles.length || solution?.swarm_size || '-'}</li>
             <li>Iterations recorded: {history.length}</li>
@@ -366,29 +433,7 @@ function App() {
               {activeFrame?.global_best?.fitness?.toFixed(2) ?? solution?.best_fitness ?? '-'}
             </li>
           </ul>
-          <div className="tuning">
-            <h3>PSO Tuning</h3>
-            <label>
-              Iterations
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={iterations}
-                onChange={(event) => setIterations(Number(event.target.value))}
-              />
-            </label>
-            <label>
-              Swarm size
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={swarmSize}
-                onChange={(event) => setSwarmSize(Number(event.target.value))}
-              />
-            </label>
-          </div>
+          {renderAlgorithmControls()}
         </div>
       </section>
     </div>

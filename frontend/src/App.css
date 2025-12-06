@@ -37,6 +37,28 @@ header p {
   color: #94a3b8;
 }
 
+.algorithm-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.algorithm-selector button {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid #1d4ed8;
+  background: transparent;
+  color: #bfdbfe;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.algorithm-selector button.active {
+  background: #1d4ed8;
+  color: #f8fafc;
+}
+
 .controls {
   display: flex;
   gap: 0.75rem;
@@ -203,6 +225,18 @@ canvas {
   background: #0f172a;
   color: #f8fafc;
   padding: 0.45rem 0.6rem;
+}
+
+.tuning.placeholder {
+  border: 1px dashed #334155;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: #0f172a;
+}
+
+.tuning.placeholder p {
+  margin: 0;
+  color: #94a3b8;
 }
 
 @media (max-width: 800px) {
