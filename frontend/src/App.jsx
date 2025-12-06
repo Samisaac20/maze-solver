@@ -303,7 +303,7 @@ function App() {
   return (
     <div className="app">
       <header>
-        <h1>Maze Solver Visualizer</h1>
+        <h1>Maze Solver Visualiser</h1>
       </header>
 
       <div className="controls">
