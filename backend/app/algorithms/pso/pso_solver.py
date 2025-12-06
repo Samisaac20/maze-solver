@@ -181,6 +181,7 @@ def solve_maze_with_pso(
   seed: int | None = None,
   capture_history: bool = False,
 ) -> dict:
+  """Search the maze with a swarm of particles and optionally capture their history."""
   if iterations <= 0:
     raise ValueError("iterations must be positive")
   if swarm_size <= 0:

@@ -175,6 +175,7 @@ def solve_maze_with_genetic(
   capture_history: bool = False,
   seed: int | None = None,
 ) -> Dict[str, object]:
+  """Run the genetic solver and optionally capture per-generation snapshots."""
   if not maze or not maze[0]:
     raise ValueError("maze must contain at least one row and column")
   if population_size <= 0:

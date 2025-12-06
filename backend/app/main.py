@@ -9,6 +9,33 @@ from .algorithms.genetic import solve_maze_with_genetic
 from .algorithms.pso import solve_maze_with_pso
 from .maze_logic.maze_gen import generate_maze, maze_to_string
 
+DEFAULT_SIZE = 15
+PSO_DEFAULTS = {"iterations": 240, "swarm_size": 70}
+GENETIC_DEFAULTS = {"population_size": 80, "generations": 120, "mutation_rate": 0.05}
+FIREFLY_DEFAULTS = {"fireflies": 60, "absorption": 1.0}
+ANT_DEFAULTS = {"ants": 60, "evaporation_rate": 0.5}
+
+
+def _resolved_seed(value: int | None) -> int:
+  return value if value is not None else randint(0, 2**31 - 1)
+
+
+def _build_maze(size: int, seed: int | None) -> tuple[list[list[int]], int]:
+  actual_seed = _resolved_seed(seed)
+  return generate_maze(size, seed=actual_seed), actual_seed
+
+
+def _standard_payload(maze: list[list[int]], *, size: int, seed: int | None, extra: dict | None = None):
+  payload = {
+    "maze": maze,
+    "size": size,
+    "maze_seed": seed,
+  }
+  if extra:
+    payload.update(extra)
+  return payload
+
+
 app = FastAPI(title="Maze Solver API", version="0.1.0")
 
 app.add_middleware(
@@ -26,10 +53,8 @@ def health_check():
 
 
 @app.get("/visuals/maze")
-def visualize_maze(size: int = 6, seed: int | None = None):
-  """Provide a freshly carved maze in matrix and text forms."""
-  actual_seed = seed if seed is not None else randint(0, 2**31 - 1)
-  maze = generate_maze(size, seed=actual_seed)
+def visualize_maze(size: int = DEFAULT_SIZE, seed: int | None = None):
+  maze, actual_seed = _build_maze(size, seed)
   return {
     "size": size,
     "seed": actual_seed,
@@ -40,14 +65,13 @@ def visualize_maze(size: int = 6, seed: int | None = None):
 
 @app.get("/visuals/pso")
 def visualize_pso(
-  size: int = 6,
+  size: int = DEFAULT_SIZE,
   maze_seed: int | None = None,
   solver_seed: int | None = None,
-  iterations: int = 40,
-  swarm_size: int = 12,
+  iterations: int = PSO_DEFAULTS["iterations"],
+  swarm_size: int = PSO_DEFAULTS["swarm_size"],
 ):
-  """Run PSO on a generated maze and expose iteration history for the frontend."""
-  maze = generate_maze(size, seed=maze_seed)
+  maze, resolved_seed = _build_maze(size, maze_seed)
   solution = solve_maze_with_pso(
     maze,
     iterations=iterations,
@@ -55,27 +79,28 @@ def visualize_pso(
     seed=solver_seed,
     capture_history=True,
   )
-  return {
-    "maze": maze,
-    "size": size,
-    "maze_seed": maze_seed,
-    "solver_seed": solver_seed,
-    "iterations": iterations,
-    "swarm_size": swarm_size,
-    "solution": solution,
-  }
+  return _standard_payload(
+    maze,
+    size=size,
+    seed=resolved_seed,
+    extra={
+      "solver_seed": solver_seed,
+      "iterations": iterations,
+      "swarm_size": swarm_size,
+      "solution": solution,
+    },
+  )
 
 
 @app.get("/visuals/genetic")
 def visualize_genetic(
-  size: int = 6,
+  size: int = DEFAULT_SIZE,
   maze_seed: int | None = None,
-  population_size: int = 80,
-  generations: int = 120,
-  mutation_rate: float = 0.08,
+  population_size: int = GENETIC_DEFAULTS["population_size"],
+  generations: int = GENETIC_DEFAULTS["generations"],
+  mutation_rate: float = GENETIC_DEFAULTS["mutation_rate"],
 ):
-  """Return placeholder data for the genetic algorithm solver."""
-  maze = generate_maze(size, seed=maze_seed)
+  maze, resolved_seed = _build_maze(size, maze_seed)
   solution = solve_maze_with_genetic(
     maze,
     population_size=population_size,
@@ -83,62 +108,66 @@ def visualize_genetic(
     mutation_rate=mutation_rate,
     capture_history=True,
   )
-  return {
-    "maze": maze,
-    "size": size,
-    "maze_seed": maze_seed,
-    "population_size": population_size,
-    "generations": generations,
-    "mutation_rate": mutation_rate,
-    "solution": solution,
-  }
+  return _standard_payload(
+    maze,
+    size=size,
+    seed=resolved_seed,
+    extra={
+      "population_size": population_size,
+      "generations": generations,
+      "mutation_rate": mutation_rate,
+      "solution": solution,
+    },
+  )
 
 
 @app.get("/visuals/firefly")
 def visualize_firefly(
-  size: int = 6,
+  size: int = DEFAULT_SIZE,
   maze_seed: int | None = None,
-  fireflies: int = 60,
-  absorption: float = 1.0,
+  fireflies: int = FIREFLY_DEFAULTS["fireflies"],
+  absorption: float = FIREFLY_DEFAULTS["absorption"],
 ):
-  """Return placeholder data for the Firefly algorithm solver."""
-  maze = generate_maze(size, seed=maze_seed)
+  maze, resolved_seed = _build_maze(size, maze_seed)
   solution = solve_maze_with_firefly(
     maze,
     fireflies=fireflies,
     absorption=absorption,
     capture_history=True,
   )
-  return {
-    "maze": maze,
-    "size": size,
-    "maze_seed": maze_seed,
-    "fireflies": fireflies,
-    "absorption": absorption,
-    "solution": solution,
-  }
+  return _standard_payload(
+    maze,
+    size=size,
+    seed=resolved_seed,
+    extra={
+      "fireflies": fireflies,
+      "absorption": absorption,
+      "solution": solution,
+    },
+  )
 
 
 @app.get("/visuals/ant-colony")
 def visualize_ant_colony(
-  size: int = 6,
+  size: int = DEFAULT_SIZE,
   maze_seed: int | None = None,
-  ants: int = 60,
-  evaporation_rate: float = 0.5,
+  ants: int = ANT_DEFAULTS["ants"],
+  evaporation_rate: float = ANT_DEFAULTS["evaporation_rate"],
 ):
-  """Return placeholder data for the Ant Colony Optimization solver."""
-  maze = generate_maze(size, seed=maze_seed)
+  maze, resolved_seed = _build_maze(size, maze_seed)
   solution = solve_maze_with_ant_colony(
     maze,
     ants=ants,
     evaporation_rate=evaporation_rate,
     capture_history=True,
   )
-  return {
-    "maze": maze,
-    "size": size,
-    "maze_seed": maze_seed,
-    "ants": ants,
-    "evaporation_rate": evaporation_rate,
-    "solution": solution,
-  }
+  return _standard_payload(
+    maze,
+    size=size,
+    seed=resolved_seed,
+    extra={
+      "ants": ants,
+      "evaporation_rate": evaporation_rate,
+      "solution": solution,
+    },
+  )
