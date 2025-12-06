@@ -1,10 +1,10 @@
-"""Simple PSO solver that searches for an order of DFS moves to solve a maze."""
+"""Particle swarm optimizer that moves directly through the maze grid."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from random import Random
-from typing import Iterable, List, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 Grid = Sequence[Sequence[int]]
 Cell = Tuple[int, int]
@@ -17,8 +17,9 @@ DIRECTIONS: Tuple[Cell, ...] = (
   (-1, 0),  # Up
 )
 
+VELOCITY_CLAMP = 1.2
 
-# Locate the first open cell and last open cell to use as start and goal.
+
 def _find_start_goal(maze: Grid) -> Tuple[Cell, Cell]:
   rows = len(maze)
   cols = len(maze[0])
@@ -46,110 +47,97 @@ def _find_start_goal(maze: Grid) -> Tuple[Cell, Cell]:
   return start, goal
 
 
-# Check if a cell is inside the grid limits.
 def _in_bounds(cell: Cell, rows: int, cols: int) -> bool:
   return 0 <= cell[0] < rows and 0 <= cell[1] < cols
 
 
-# Measure how far two cells are using Manhattan distance.
-def _manhattan(a: Cell, b: Cell) -> int:
-  return abs(a[0] - b[0]) + abs(a[1] - b[1])
+def _fitness(cell: Cell, goal: Cell, steps: int, visited: int) -> float:
+  distance = abs(cell[0] - goal[0]) + abs(cell[1] - goal[1])
+  base = 1.0 / (1 + distance)
+  novelty = visited / max(1, steps)
+  score = base + 0.1 * novelty
+  if cell == goal:
+    score += 10.0
+  return score
 
 
-# Yield neighbors in the order prescribed by the particle weights.
-def _neighbor_cells(cell: Cell, order: Sequence[int]) -> Iterable[Cell]:
-  for idx in order:
-    dr, dc = DIRECTIONS[idx]
-    yield cell[0] + dr, cell[1] + dc
-
-
-# Run DFS using a specific direction order and track best partial path.
-def _depth_first_with_order(maze: Grid, order: Sequence[int]) -> Tuple[Path, bool]:
-  rows = len(maze)
-  cols = len(maze[0])
-  start, goal = _find_start_goal(maze)
-
-  stack: List[Tuple[Cell, Path]] = [(start, [start])]
-  visited = {start}
-  best_partial = [start]
-
-  while stack:
-    current, path = stack.pop()
-
-    if _manhattan(current, goal) < _manhattan(best_partial[-1], goal):
-      best_partial = path
-
-    if current == goal:
-      return path, True
-
-    for neighbor in _neighbor_cells(current, order):
-      if not _in_bounds(neighbor, rows, cols):
-        continue
-      if maze[neighbor[0]][neighbor[1]] == 1:
-        continue
-      if neighbor in visited:
-        continue
-      visited.add(neighbor)
-      stack.append((neighbor, path + [neighbor]))
-
-  return best_partial, False
-
-
-# Score an order by how quickly it solves or approaches the goal.
-def _evaluate_order(maze: Grid, order: Sequence[int]) -> Tuple[float, Path, bool]:
-  path, solved = _depth_first_with_order(maze, order)
-  start, goal = _find_start_goal(maze)
-  if solved:
-    fitness = 1000.0 - len(path)
-  else:
-    distance = _manhattan(path[-1], goal)
-    fitness = -float(distance + len(path))
-  return fitness, path, solved
+def _serialize_path(path: Path) -> List[List[int]]:
+  return [[row, col] for row, col in path]
 
 
 @dataclass
 class Particle:
-  weights: List[float]
-  velocity: List[float]
-  best_weights: List[float]
+  position: Tuple[float, float]
+  velocity: Tuple[float, float]
+  cell: Cell
+  best_position: Tuple[float, float]
   best_fitness: float
-  best_path: Path
-  solved: bool
+  trace: Path
+  visited: Dict[Cell, int]
+  stagnation: int = 0
+  solved: bool = False
 
 
-# Convert weight values to a sorted direction preference.
-def _order_from_weights(weights: Sequence[float]) -> List[int]:
-  return sorted(range(len(weights)), key=lambda idx: weights[idx], reverse=True)
-
-
-# Create the initial swarm with random priorities and velocities.
 def _initialize_particles(
-  maze: Grid, swarm_size: int, rng: Random
-) -> List[Particle]:
+  maze: Grid,
+  swarm_size: int,
+  rng: Random,
+) -> Tuple[List[Particle], Cell, Cell]:
+  start, goal = _find_start_goal(maze)
   particles: List[Particle] = []
   for _ in range(swarm_size):
-    weights = [rng.uniform(-1, 1) for _ in DIRECTIONS]
-    velocity = [rng.uniform(-0.5, 0.5) for _ in DIRECTIONS]
-    order = _order_from_weights(weights)
-    fitness, path, solved = _evaluate_order(maze, order)
+    jitter = (rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3))
+    position = (start[0] + jitter[0], start[1] + jitter[1])
+    velocity = (rng.uniform(-0.5, 0.5), rng.uniform(-0.5, 0.5))
+    fitness = _fitness(start, goal, 1, 1)
     particles.append(
       Particle(
-        weights=weights[:],
-        velocity=velocity[:],
-        best_weights=weights[:],
+        position=position,
+        velocity=velocity,
+        cell=start,
+        best_position=position,
         best_fitness=fitness,
-        best_path=path,
-        solved=solved,
+        trace=[start],
+        visited={start: 1},
       )
     )
-  return particles
+  return particles, start, goal
 
 
-# Main entry that runs PSO to look for a maze path.
+def _discretize(position: Tuple[float, float], rows: int, cols: int) -> Cell:
+  r = int(round(position[0]))
+  c = int(round(position[1]))
+  r = max(0, min(rows - 1, r))
+  c = max(0, min(cols - 1, c))
+  return r, c
+
+
+def _step_toward(current: Cell, target: Cell, maze: Grid, rng: Random) -> Cell:
+  rows = len(maze)
+  cols = len(maze[0])
+  options: List[Cell] = []
+  dr = target[0] - current[0]
+  dc = target[1] - current[1]
+  candidates = []
+  if dr != 0:
+    step = 1 if dr > 0 else -1
+    candidates.append((current[0] + step, current[1]))
+  if dc != 0:
+    step = 1 if dc > 0 else -1
+    candidates.append((current[0], current[1] + step))
+  rng.shuffle(candidates)
+  for cell in candidates:
+    if _in_bounds(cell, rows, cols) and maze[cell[0]][cell[1]] == 0:
+      options.append(cell)
+  if options:
+    return options[0]
+  return current
+
+
 def solve_maze_with_pso(
   maze: Grid,
-  iterations: int = 40,
-  swarm_size: int = 12,
+  iterations: int = 80,
+  swarm_size: int = 30,
   seed: int | None = None,
   capture_history: bool = False,
 ) -> dict:
@@ -161,63 +149,94 @@ def solve_maze_with_pso(
     raise ValueError("maze must contain at least one row and one column")
 
   rng = Random(seed)
-  particles = _initialize_particles(maze, swarm_size, rng)
+  particles, start, goal = _initialize_particles(maze, swarm_size, rng)
   global_best = max(particles, key=lambda p: p.best_fitness)
 
-  inertia = 0.7
+  inertia = 0.5
   cognitive = 1.5
-  social = 1.5
+  social = 1.75
+  rows = len(maze)
+  cols = len(maze[0])
+  stagnation_limit = iterations // 4 or 1
 
   history: List[dict] = []
 
   for iteration in range(iterations):
     iteration_particles: List[dict] = []
-    for particle_index, particle in enumerate(particles):
-      new_velocity: List[float] = []
-      new_weights: List[float] = []
-      for idx in range(len(DIRECTIONS)):
-        r1 = rng.random()
-        r2 = rng.random()
-        vel = (
-          inertia * particle.velocity[idx]
-          + cognitive * r1 * (particle.best_weights[idx] - particle.weights[idx])
-          + social * r2 * (global_best.best_weights[idx] - particle.weights[idx])
+
+    for idx, particle in enumerate(particles):
+      r1 = rng.random()
+      r2 = rng.random()
+      vx = (
+        inertia * particle.velocity[0]
+        + cognitive * r1 * (particle.best_position[0] - particle.position[0])
+        + social * r2 * (global_best.best_position[0] - particle.position[0])
+      )
+      vy = (
+        inertia * particle.velocity[1]
+        + cognitive * r1 * (particle.best_position[1] - particle.position[1])
+        + social * r2 * (global_best.best_position[1] - particle.position[1])
+      )
+      vx = max(-VELOCITY_CLAMP, min(VELOCITY_CLAMP, vx))
+      vy = max(-VELOCITY_CLAMP, min(VELOCITY_CLAMP, vy))
+
+      particle.velocity = (vx, vy)
+      particle.position = (particle.position[0] + vx, particle.position[1] + vy)
+      target_cell = _discretize(particle.position, rows, cols)
+      if maze[target_cell[0]][target_cell[1]] == 1:
+        target_cell = particle.cell
+
+      new_cell = _step_toward(particle.cell, target_cell, maze, rng)
+      if new_cell != particle.cell:
+        particle.cell = new_cell
+        particle.trace.append(new_cell)
+        particle.visited[new_cell] = particle.visited.get(new_cell, 0) + 1
+
+      fitness = _fitness(
+        particle.cell,
+        goal,
+        len(particle.trace),
+        len(particle.visited),
+      )
+      improved = False
+      if fitness > particle.best_fitness:
+        particle.best_fitness = fitness
+        particle.best_position = particle.position
+        particle.trace = particle.trace[-rows * cols :]
+        improved = True
+
+      if fitness > global_best.best_fitness:
+        global_best = Particle(
+          position=particle.position[:],
+          velocity=particle.velocity[:],
+          cell=particle.cell,
+          best_position=particle.best_position[:],
+          best_fitness=particle.best_fitness,
+          trace=particle.trace[:],
+          visited=particle.visited.copy(),
+          solved=particle.cell == goal,
         )
-        new_velocity.append(vel)
-        new_weights.append(particle.weights[idx] + vel)
 
-      particle.velocity = new_velocity
-      particle.weights = new_weights
+      particle.solved = particle.cell == goal
+      particle.stagnation = 0 if improved else particle.stagnation + 1
 
-      order = _order_from_weights(particle.weights)
-      fitness, path, solved = _evaluate_order(maze, order)
+      if particle.stagnation >= stagnation_limit:
+        jitter = (rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3))
+        particle.position = (start[0] + jitter[0], start[1] + jitter[1])
+        particle.cell = start
+        particle.velocity = (rng.uniform(-0.5, 0.5), rng.uniform(-0.5, 0.5))
+        particle.trace = [start]
+        particle.visited = {start: 1}
+        particle.stagnation = 0
 
       if capture_history:
         iteration_particles.append(
           {
-            "index": particle_index,
-            "path": _serialize_path(path),
+            "index": idx,
+            "path": _serialize_path(particle.trace),
             "fitness": fitness,
-            "solved": solved,
-            "best_path": _serialize_path(particle.best_path),
-            "best_fitness": particle.best_fitness,
+            "solved": particle.solved,
           }
-        )
-
-      if fitness > particle.best_fitness:
-        particle.best_fitness = fitness
-        particle.best_weights = particle.weights[:]
-        particle.best_path = path
-        particle.solved = solved
-
-      if fitness > global_best.best_fitness:
-        global_best = Particle(
-          weights=particle.weights[:],
-          velocity=particle.velocity[:],
-          best_weights=particle.best_weights[:],
-          best_fitness=fitness,
-          best_path=path,
-          solved=solved,
         )
 
     if capture_history:
@@ -226,17 +245,16 @@ def solve_maze_with_pso(
           "iteration": iteration,
           "particles": iteration_particles,
           "global_best": {
-            "path": _serialize_path(global_best.best_path),
+            "path": _serialize_path(global_best.trace),
             "fitness": global_best.best_fitness,
             "solved": global_best.solved,
-            "direction_order": _order_from_weights(global_best.best_weights),
           },
         }
       )
+
     if global_best.solved:
       break
 
-  start, goal = _find_start_goal(maze)
   result = {
     "solved": global_best.solved,
     "start": start,
@@ -244,12 +262,8 @@ def solve_maze_with_pso(
     "iterations": iterations,
     "swarm_size": swarm_size,
     "best_fitness": global_best.best_fitness,
-    "path": _serialize_path(global_best.best_path),
-    "direction_order": _order_from_weights(global_best.best_weights),
+    "path": _serialize_path(global_best.trace),
   }
   if capture_history:
     result["history"] = history
   return result
-# Convert a list of tuples into JSON-friendly coordinate pairs.
-def _serialize_path(path: Path) -> List[List[int]]:
-  return [[row, col] for row, col in path]

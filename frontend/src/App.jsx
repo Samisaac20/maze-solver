@@ -25,6 +25,8 @@ function App() {
   const [mazeSize, setMazeSize] = useState(null);
   const [mazeSeed, setMazeSeed] = useState(null);
   const [desiredSize, setDesiredSize] = useState(() => normalizeSize(30));
+  const [iterations, setIterations] = useState(80);
+  const [swarmSize, setSwarmSize] = useState(30);
   const [currentStep, setCurrentStep] = useState(0);
   const [frameProgress, setFrameProgress] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -196,7 +198,12 @@ function App() {
     }
   };
 
-  const fetchSolution = async (sizeOverride = desiredSize, seedOverride = mazeSeed) => {
+  const fetchSolution = async (
+    sizeOverride = desiredSize,
+    seedOverride = mazeSeed,
+    iterationsOverride = iterations,
+    swarmOverride = swarmSize,
+  ) => {
     setLoading(true);
     setError('');
     try {
@@ -205,6 +212,8 @@ function App() {
       if (seedOverride !== null && seedOverride !== undefined) {
         url.searchParams.set('maze_seed', seedOverride);
       }
+      url.searchParams.set('iterations', iterationsOverride);
+      url.searchParams.set('swarm_size', swarmOverride);
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to run solver');
@@ -231,6 +240,10 @@ function App() {
       setError(`Maze size must be a multiple of 5 between ${MIN_SIZE} and ${MAX_SIZE}.`);
       return;
     }
+    if (iterations <= 0 || swarmSize <= 0) {
+      setError('Iterations and swarm size must be positive integers.');
+      return;
+    }
     let seed = mazeSeed;
     if (seed === null) {
       seed = await fetchMaze(desiredSize);
@@ -238,7 +251,7 @@ function App() {
     if (seed === null || seed === undefined) {
       return;
     }
-    fetchSolution(desiredSize, seed);
+    fetchSolution(desiredSize, seed, iterations, swarmSize);
   };
 
   const handleStop = () => {
@@ -290,7 +303,7 @@ function App() {
   return (
     <div className="app">
       <header>
-        <h1>Maze Solver Visualizer</h1>
+        <h1>Maze Solver Visualiser</h1>
       </header>
 
       <div className="controls">
@@ -353,6 +366,29 @@ function App() {
               {activeFrame?.global_best?.fitness?.toFixed(2) ?? solution?.best_fitness ?? '-'}
             </li>
           </ul>
+          <div className="tuning">
+            <h3>PSO Tuning</h3>
+            <label>
+              Iterations
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={iterations}
+                onChange={(event) => setIterations(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Swarm size
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={swarmSize}
+                onChange={(event) => setSwarmSize(Number(event.target.value))}
+              />
+            </label>
+          </div>
         </div>
       </section>
     </div>
