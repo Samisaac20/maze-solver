@@ -40,9 +40,6 @@ function GeneticControls({
           onChange={(event) => onMutationRateChange(Number(event.target.value))}
         />
       </label>
-      <p className="helper-text">
-        Watch each generation explore the maze, with the fittest path highlighted in red.
-      </p>
     </div>
   );
 }

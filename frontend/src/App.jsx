@@ -1,404 +1,85 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRef } from 'react';
 import './App.css';
 import AntColonyControls from './algorithms/AntColonyControls';
 import FireflyControls from './algorithms/FireflyControls';
 import GeneticControls from './algorithms/GeneticControls';
 import PsoControls from './algorithms/PsoControls';
-import { drawMaze as drawMazeOnCanvas } from './mazeRenderer';
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
-const ALGORITHMS = [
-  { id: 'pso', label: 'Particle Swarm' },
-  { id: 'genetic', label: 'Genetic Algorithm' },
-  { id: 'firefly', label: 'Firefly Algorithm' },
-  { id: 'ant', label: 'Ant Colony' },
-];
-const ALGORITHM_LABELS = {
-  pso: 'Particle Swarm Optimization',
-  genetic: 'Genetic Algorithm',
-  firefly: 'Firefly Algorithm',
-  ant: 'Ant Colony Optimization',
-};
+import { ALGORITHMS, MAX_SIZE, MIN_SIZE, useMazeSolver } from './appLogic';
 
 function App() {
   const canvasRef = useRef(null);
-  const [maze, setMaze] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [solution, setSolution] = useState(null);
-  const [activeAlgorithm, setActiveAlgorithm] = useState('pso');
-  const MIN_SIZE = 15;
-  const MAX_SIZE = 100;
+  const {
+    maze,
+    activeAlgorithm,
+    setActiveAlgorithm,
+    desiredSize,
+    adjustSize,
+    handleSizeInput,
+    iterations,
+    setIterations,
+    swarmSize,
+    setSwarmSize,
+    gaPopulation,
+    setGaPopulation,
+    gaGenerations,
+    setGaGenerations,
+    gaMutationRate,
+    setGaMutationRate,
+    speedMs,
+    setSpeedMs,
+    handleStart,
+    fetchMaze,
+    handleStop,
+    handleReset,
+    loading,
+    isRunning,
+    error,
+    statusText,
+    algorithmDisplay,
+    mazeSize,
+    trackedLabel,
+    trackedCount,
+    recordedLabel,
+    historyLength,
+    currentFrameLabel,
+    bestFitnessDisplay,
+    explanationPoints,
+    psoSuggestions,
+  } = useMazeSolver(canvasRef);
 
-  const normalizeSize = (value) => {
-    if (Number.isNaN(value)) {
-      return MIN_SIZE;
+  const sizeLabel = mazeSize ?? (maze.length ? `${maze.length} x ${maze[0].length}` : '-');
+
+  const algorithmControls = (() => {
+    switch (activeAlgorithm) {
+      case 'pso':
+        return (
+          <PsoControls
+            iterations={iterations}
+            swarmSize={swarmSize}
+            iterationsPlaceholder={psoSuggestions.iterations}
+            swarmPlaceholder={psoSuggestions.swarmSize}
+            onIterationsChange={setIterations}
+            onSwarmSizeChange={setSwarmSize}
+          />
+        );
+      case 'genetic':
+        return (
+          <GeneticControls
+            populationSize={gaPopulation}
+            generations={gaGenerations}
+            mutationRate={gaMutationRate}
+            onPopulationChange={setGaPopulation}
+            onGenerationsChange={setGaGenerations}
+            onMutationRateChange={setGaMutationRate}
+          />
+        );
+      case 'firefly':
+        return <FireflyControls />;
+      case 'ant':
+      default:
+        return <AntColonyControls />;
     }
-    let clamped = Math.max(MIN_SIZE, Math.min(MAX_SIZE, value));
-    clamped = Math.round(clamped / 5) * 5;
-    clamped = Math.max(MIN_SIZE, Math.min(MAX_SIZE, clamped));
-    return clamped;
-  };
-
-  const [mazeSize, setMazeSize] = useState(null);
-  const [mazeSeed, setMazeSeed] = useState(null);
-  const [desiredSize, setDesiredSize] = useState(() => normalizeSize(30));
-  const [iterations, setIterations] = useState(80);
-  const [swarmSize, setSwarmSize] = useState(30);
-  const [gaPopulation, setGaPopulation] = useState(80);
-  const [gaGenerations, setGaGenerations] = useState(120);
-  const [gaMutationRate, setGaMutationRate] = useState(0.08);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [frameProgress, setFrameProgress] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [speedMs, setSpeedMs] = useState(100);
-  const [runFailed, setRunFailed] = useState(false);
-  const algorithmDisplay = ALGORITHM_LABELS[activeAlgorithm];
-  const isPsoActive = activeAlgorithm === 'pso';
-  const isGeneticActive = activeAlgorithm === 'genetic';
-
-  const renderAlgorithmControls = () => {
-    if (activeAlgorithm === 'pso') {
-      return (
-        <PsoControls
-          iterations={iterations}
-          swarmSize={swarmSize}
-          onIterationsChange={setIterations}
-          onSwarmSizeChange={setSwarmSize}
-        />
-      );
-    }
-    if (activeAlgorithm === 'genetic') {
-      return (
-        <GeneticControls
-          populationSize={gaPopulation}
-          generations={gaGenerations}
-          mutationRate={gaMutationRate}
-          onPopulationChange={setGaPopulation}
-          onGenerationsChange={setGaGenerations}
-          onMutationRateChange={setGaMutationRate}
-        />
-      );
-    }
-    if (activeAlgorithm === 'firefly') {
-      return <FireflyControls />;
-    }
-    return <AntColonyControls />;
-  };
-
-  const activeFrame = useMemo(() => {
-    if (history.length === 0) {
-      return null;
-    }
-    return history[Math.min(currentStep, history.length - 1)];
-  }, [history, currentStep]);
-
-  const activeExplorers = useMemo(() => {
-    if (!activeFrame) {
-      return [];
-    }
-    if (isGeneticActive) {
-      return activeFrame.population ?? [];
-    }
-    return activeFrame.particles ?? [];
-  }, [activeFrame, isGeneticActive]);
-
-  const frameBest = useMemo(() => {
-    if (!activeFrame) {
-      return null;
-    }
-    if (isGeneticActive) {
-      return activeFrame.best ?? null;
-    }
-    return activeFrame.global_best ?? null;
-  }, [activeFrame, isGeneticActive]);
-
-  const bestPath = frameBest?.path ?? solution?.path ?? [];
-  const bestFitness = frameBest?.fitness ?? solution?.best_fitness ?? null;
-
-  const renderMaze = () => {
-    drawMazeOnCanvas({
-      canvas: canvasRef.current,
-      maze,
-      explorers: activeExplorers,
-      bestPath,
-      solution,
-      frameProgress,
-      isRunning,
-    });
-  };
-
-  useEffect(() => {
-    renderMaze();
-  }, [maze, activeExplorers, bestPath, solution, frameProgress, isRunning]);
-
-  useEffect(() => {
-    if (!isRunning || history.length === 0) {
-      return undefined;
-    }
-    let frameId;
-    let lastTime = performance.now();
-
-    const stepDuration = Math.max(20, Math.min(500, speedMs));
-
-    const tick = (time) => {
-      const delta = time - lastTime;
-      lastTime = time;
-      setFrameProgress((prev) => {
-        const next = prev + delta / stepDuration;
-        if (next >= 1) {
-          setCurrentStep((prevStep) => {
-            if (prevStep >= history.length - 1) {
-              setIsRunning(false);
-              return prevStep;
-            }
-            return prevStep + 1;
-          });
-          return next - 1;
-        }
-        return next;
-      });
-      frameId = requestAnimationFrame(tick);
-    };
-
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
-  }, [isRunning, history.length, speedMs]);
-
-  const fetchMaze = async (sizeOverride = desiredSize) => {
-    setLoading(true);
-    setError('');
-    setRunFailed(false);
-    try {
-      const url = new URL(`${API_BASE}/visuals/maze`);
-      url.searchParams.set('size', sizeOverride);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch maze data');
-      }
-      const data = await response.json();
-      setMaze(data.grid ?? []);
-      setMazeSeed(data.seed ?? null);
-      setSolution(null);
-      setMazeSize(data.size ?? sizeOverride);
-      setHistory([]);
-      setCurrentStep(0);
-      setFrameProgress(0);
-      setIsRunning(false);
-      return data.seed ?? null;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchPsoSolution = async (
-    sizeOverride = desiredSize,
-    seedOverride = mazeSeed,
-    iterationsOverride = iterations,
-    swarmOverride = swarmSize,
-  ) => {
-    setLoading(true);
-    setError('');
-    setRunFailed(false);
-    try {
-      const url = new URL(`${API_BASE}/visuals/pso`);
-      url.searchParams.set('size', sizeOverride);
-      if (seedOverride !== null && seedOverride !== undefined) {
-        url.searchParams.set('maze_seed', seedOverride);
-      }
-      url.searchParams.set('iterations', iterationsOverride);
-      url.searchParams.set('swarm_size', swarmOverride);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to run solver');
-      }
-      const data = await response.json();
-      setMaze(data.maze ?? []);
-      setSolution(data.solution ?? null);
-      setMazeSize(data.size ?? sizeOverride);
-      setMazeSeed(data.maze_seed ?? seedOverride);
-      const historyData = data.solution?.history ?? [];
-      setHistory(historyData);
-      const solved = Boolean(data.solution?.solved);
-      setRunFailed(!solved);
-      if (!solved && historyData.length > 0) {
-        setCurrentStep(historyData.length - 1);
-        setFrameProgress(1);
-        setIsRunning(false);
-      } else {
-        setCurrentStep(0);
-        setFrameProgress(0);
-        setIsRunning(historyData.length > 0);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setRunFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchGeneticSolution = async (
-    sizeOverride = desiredSize,
-    seedOverride = mazeSeed,
-    populationOverride = gaPopulation,
-    generationOverride = gaGenerations,
-    mutationOverride = gaMutationRate,
-  ) => {
-    setLoading(true);
-    setError('');
-    setRunFailed(false);
-    try {
-      const url = new URL(`${API_BASE}/visuals/genetic`);
-      url.searchParams.set('size', sizeOverride);
-      if (seedOverride !== null && seedOverride !== undefined) {
-        url.searchParams.set('maze_seed', seedOverride);
-      }
-      url.searchParams.set('population_size', populationOverride);
-      url.searchParams.set('generations', generationOverride);
-      url.searchParams.set('mutation_rate', mutationOverride);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to run solver');
-      }
-      const data = await response.json();
-      setMaze(data.maze ?? []);
-      setSolution(data.solution ?? null);
-      setMazeSize(data.size ?? sizeOverride);
-      setMazeSeed(data.maze_seed ?? seedOverride);
-      const historyData = data.solution?.history ?? [];
-      setHistory(historyData);
-      const solved = Boolean(data.solution?.solved);
-      setRunFailed(!solved);
-      if (!solved && historyData.length > 0) {
-        setCurrentStep(historyData.length - 1);
-        setFrameProgress(1);
-        setIsRunning(false);
-      } else {
-        setCurrentStep(0);
-        setFrameProgress(0);
-        setIsRunning(historyData.length > 0);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setRunFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStart = async () => {
-    if (desiredSize < MIN_SIZE || desiredSize > MAX_SIZE || desiredSize % 5 !== 0) {
-      setError(`Maze size must be a multiple of 5 between ${MIN_SIZE} and ${MAX_SIZE}.`);
-      return;
-    }
-    if (isPsoActive) {
-      if (iterations <= 0 || swarmSize <= 0) {
-        setError('Iterations and swarm size must be positive integers.');
-        return;
-      }
-    } else if (isGeneticActive) {
-      if (gaPopulation <= 0 || gaGenerations <= 0) {
-        setError('Population size and generations must be positive.');
-        return;
-      }
-      if (Number.isNaN(gaMutationRate) || gaMutationRate <= 0 || gaMutationRate > 1) {
-        setError('Mutation rate must be between 0 and 1.');
-        return;
-      }
-    } else {
-      setError(`${algorithmDisplay} visualisation is coming soon.`);
-      return;
-    }
-    setError('');
-    let seed = mazeSeed;
-    if (seed === null) {
-      seed = await fetchMaze(desiredSize);
-    }
-    if (seed === null || seed === undefined) {
-      return;
-    }
-    if (isPsoActive) {
-      fetchPsoSolution(desiredSize, seed, iterations, swarmSize);
-    } else if (isGeneticActive) {
-      fetchGeneticSolution(desiredSize, seed, gaPopulation, gaGenerations, gaMutationRate);
-    }
-  };
-
-  const handleStop = () => {
-    setIsRunning(false);
-  };
-
-  const handleReset = () => {
-    setIsRunning(false);
-    setMaze([]);
-    setHistory([]);
-    setSolution(null);
-    setMazeSize(null);
-    setCurrentStep(0);
-    setFrameProgress(0);
-    setError('');
-    setRunFailed(false);
-  };
-
-  const trackedLabel = isGeneticActive ? 'Population tracked' : 'Particles tracked';
-  const recordedLabel = isGeneticActive ? 'Generations recorded' : 'Iterations recorded';
-  const playbackLabel = isGeneticActive ? 'Generation' : 'Iteration';
-  const trackedCount =
-    activeExplorers.length
-    || (isGeneticActive ? solution?.population_size : solution?.swarm_size)
-    || '-';
-  const currentFrameLabel = history.length
-    ? `${playbackLabel} ${Math.min(currentStep + 1, history.length)}/${history.length}`
-    : '-';
-  const bestFitnessDisplay = typeof bestFitness === 'number' ? bestFitness.toFixed(2) : '-';
-
-  const statusText = useMemo(() => {
-    if (runFailed) {
-      return 'search failed';
-    }
-    if (!solution) {
-      return 'Ready to start visualizing the maze solver.';
-    }
-    if (solution.solved) {
-      return `Solved in ${solution.path.length} steps.`;
-    }
-    return 'Solver is exploring...';
-  }, [solution, runFailed]);
-
-  const adjustSize = (delta) => {
-    setDesiredSize((prev) => normalizeSize(prev + delta));
-  };
-
-  const handleSizeInput = (value) => {
-    const parsed = Number(value);
-    if (Number.isNaN(parsed)) {
-      return;
-    }
-    setDesiredSize(normalizeSize(parsed));
-  };
-
-  useEffect(() => {
-    setIsRunning(false);
-    setCurrentStep(0);
-    setFrameProgress(0);
-    if (desiredSize >= MIN_SIZE && desiredSize <= MAX_SIZE && desiredSize % 5 === 0) {
-      fetchMaze(desiredSize);
-    }
-  }, [desiredSize]);
-
-  useEffect(() => {
-    setIsRunning(false);
-    setHistory([]);
-    setSolution(null);
-    setCurrentStep(0);
-    setFrameProgress(0);
-    setError('');
-    setRunFailed(false);
-  }, [activeAlgorithm]);
+  })();
 
   return (
     <div className="app">
@@ -439,7 +120,7 @@ function App() {
           <input
             type="range"
             min="20"
-            max="500"
+            max="1000"
             step="10"
             value={speedMs}
             onChange={(event) => setSpeedMs(Number(event.target.value))}
@@ -449,7 +130,7 @@ function App() {
           Start
         </button>
         <button
-          onClick={() => fetchMaze(desiredSize)}
+          onClick={() => fetchMaze()}
           disabled={loading}
         >
           Generate Maze
@@ -471,13 +152,23 @@ function App() {
           <h2>Playback Details</h2>
           <ul>
             <li>Algorithm: {algorithmDisplay}</li>
-            <li>Maze size: {mazeSize ?? (maze.length ? `${maze.length} x ${maze[0].length}` : '-')}</li>
+            <li>Maze size: {sizeLabel}</li>
             <li>{trackedLabel}: {trackedCount}</li>
-            <li>{recordedLabel}: {history.length}</li>
+            <li>{recordedLabel}: {historyLength}</li>
             <li>Current frame: {currentFrameLabel}</li>
             <li>Best fitness: {bestFitnessDisplay}</li>
           </ul>
-          {renderAlgorithmControls()}
+          {algorithmControls}
+          {explanationPoints.length > 0 && (
+            <div className="explanation">
+              <h3>How this method solves the maze</h3>
+              <ul>
+                {explanationPoints.map((point, index) => (
+                  <li key={`${activeAlgorithm}-explain-${index}`}>{point}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </section>
     </div>

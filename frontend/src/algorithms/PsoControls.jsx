@@ -1,4 +1,11 @@
-function PsoControls({ iterations, swarmSize, onIterationsChange, onSwarmSizeChange }) {
+function PsoControls({
+  iterations,
+  swarmSize,
+  iterationsPlaceholder,
+  swarmPlaceholder,
+  onIterationsChange,
+  onSwarmSizeChange,
+}) {
   return (
     <div className="tuning">
       <h3>PSO Tuning</h3>
@@ -8,8 +15,13 @@ function PsoControls({ iterations, swarmSize, onIterationsChange, onSwarmSizeCha
           type="number"
           min="1"
           step="1"
-          value={iterations}
-          onChange={(event) => onIterationsChange(Number(event.target.value))}
+          value={iterations ?? ''}
+          placeholder={iterationsPlaceholder}
+          inputMode="numeric"
+          onChange={(event) => {
+            const { value } = event.target;
+            onIterationsChange(value === '' ? null : Number(value));
+          }}
         />
       </label>
       <label>
@@ -18,8 +30,13 @@ function PsoControls({ iterations, swarmSize, onIterationsChange, onSwarmSizeCha
           type="number"
           min="1"
           step="1"
-          value={swarmSize}
-          onChange={(event) => onSwarmSizeChange(Number(event.target.value))}
+          value={swarmSize ?? ''}
+          placeholder={swarmPlaceholder}
+          inputMode="numeric"
+          onChange={(event) => {
+            const { value } = event.target;
+            onSwarmSizeChange(value === '' ? null : Number(value));
+          }}
         />
       </label>
     </div>

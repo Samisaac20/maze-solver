@@ -47,7 +47,7 @@ export const drawMaze = ({
 
   maze.forEach((row, rIdx) => {
     row.forEach((cell, cIdx) => {
-      ctx.fillStyle = cell === 1 ? '#1e293b' : '#f8fafc';
+      ctx.fillStyle = cell === 1 ? '#1e293b' : '#c3d3ebff';
       ctx.fillRect(cIdx * CELL_SIZE, rIdx * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     });
   });
@@ -60,7 +60,7 @@ export const drawMaze = ({
     explorers.forEach((explorer, index) => {
       const hue = Math.round((index / explorers.length) * 360);
       const color = `hsla(${hue}, 70%, 65%, 0.65)`;
-      drawPath(ctx, explorer.path, color, CELL_SIZE / 4, progress, 0.5);
+      drawPath(ctx, explorer.path, color, CELL_SIZE / 3, progress, 0.8);
       const visibleCount = Math.max(1, Math.floor(explorer.path.length * progress));
       const last = explorer.path?.[Math.min(visibleCount - 1, explorer.path.length - 1)];
       if (last) {

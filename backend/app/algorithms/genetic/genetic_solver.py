@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 from random import Random
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List
 
-Grid = Sequence[Sequence[int]]
-Cell = Tuple[int, int]
-Path = List[Cell]
-Chromosome = List[int]
-
-DIRECTIONS: Tuple[Cell, ...] = (
-  (-1, 0),  # Up
-  (1, 0),  # Down
-  (0, -1),  # Left
-  (0, 1),  # Right
+from .path_utils import (
+  Cell,
+  Grid,
+  Path,
+  build_adjacency,
+  build_distance_map,
+  find_start_goal,
+  greedy_path_to_goal,
+  random_path,
+  simplify_path,
+  biased_step,
 )
+
+Chromosome = Path
 VISUAL_PATH_LIMIT = 600
 HISTORY_SAMPLE_LIMIT = 24
 
@@ -41,126 +43,81 @@ class Individual:
   path: Path
 
 
-def _find_start_goal(maze: Grid) -> Tuple[Cell, Cell]:
-  rows = len(maze)
-  cols = len(maze[0])
-  start = None
-  goal = None
-  for r in range(rows):
-    for c in range(cols):
-      if maze[r][c] == 0:
-        start = (r, c)
-        break
-    if start:
-      break
-  for r in range(rows - 1, -1, -1):
-    for c in range(cols - 1, -1, -1):
-      if maze[r][c] == 0:
-        goal = (r, c)
-        break
-    if goal:
-      break
-  if start is None or goal is None:
-    raise ValueError("maze must expose start and goal cells")
-  return start, goal
-
-
-def _in_bounds(cell: Cell, rows: int, cols: int) -> bool:
-  return 0 <= cell[0] < rows and 0 <= cell[1] < cols
-
-
-def _build_distance_map(maze: Grid, goal: Cell) -> List[List[int]]:
-  rows = len(maze)
-  cols = len(maze[0])
-  dist = [[10**9 for _ in range(cols)] for _ in range(rows)]
-  queue: deque[Cell] = deque()
-  dist[goal[0]][goal[1]] = 0
-  queue.append(goal)
-  while queue:
-    row, col = queue.popleft()
-    for dr, dc in DIRECTIONS:
-      nr, nc = row + dr, col + dc
-      if not _in_bounds((nr, nc), rows, cols) or maze[nr][nc] == 1:
-        continue
-      if dist[nr][nc] > dist[row][col] + 1:
-        dist[nr][nc] = dist[row][col] + 1
-        queue.append((nr, nc))
-  return dist
-
-
-def _simulate_chromosome(
-  genes: Chromosome,
-  maze: Grid,
-  start: Cell,
+def _evaluate_path(
+  path: Path,
   goal: Cell,
   distance_map: List[List[int]],
 ) -> SimulationResult:
-  rows = len(maze)
-  cols = len(maze[0])
-  cell = start
-  path: Path = [start]
-  visited: Dict[Cell, int] = {start: 1}
-  collisions = 0
-  best_distance = distance_map[start[0]][start[1]]
-  solved = False
-
-  for direction_idx in genes:
-    dr, dc = DIRECTIONS[direction_idx % len(DIRECTIONS)]
-    next_cell = (cell[0] + dr, cell[1] + dc)
-    if not _in_bounds(next_cell, rows, cols) or maze[next_cell[0]][next_cell[1]] == 1:
-      collisions += 1
-      continue
-    cell = next_cell
-    path.append(cell)
-    visited[cell] = visited.get(cell, 0) + 1
-    cell_distance = distance_map[cell[0]][cell[1]]
-    if cell_distance < best_distance:
-      best_distance = cell_distance
-    if cell == goal:
-      solved = True
-      break
-
+  if not path:
+    raise ValueError("path must contain at least one cell")
+  simplified_path = simplify_path(path)
+  final_cell = simplified_path[-1]
+  visited_unique = len({cell for cell in simplified_path})
+  best_distance = min(distance_map[cell[0]][cell[1]] for cell in simplified_path)
   return SimulationResult(
-    path=path,
-    visited_unique=len(visited),
-    collisions=collisions,
-    final_cell=cell,
-    best_distance=0 if solved else best_distance,
-    solved=solved,
+    path=simplified_path,
+    visited_unique=visited_unique,
+    collisions=0,
+    final_cell=final_cell,
+    best_distance=best_distance,
+    solved=final_cell == goal,
   )
 
 
-def _fitness(
-  result: SimulationResult,
-  distance_map: List[List[int]],
-) -> float:
+def _fitness(result: SimulationResult, distance_map: List[List[int]]) -> float:
   distance = distance_map[result.final_cell[0]][result.final_cell[1]]
   distance_score = 1.0 / (1 + distance)
   progress_score = 1.0 / (1 + result.best_distance)
   coverage = result.visited_unique / max(1, len(result.path))
-  collision_penalty = 0.02 * result.collisions
-  score = 0.5 * progress_score + 0.5 * distance_score + 0.2 * coverage - collision_penalty
+  path_efficiency = 1.0 / max(1, len(result.path))
+  score = (
+    0.5 * progress_score
+    + 0.35 * distance_score
+    + 0.25 * coverage
+    + 0.15 * path_efficiency
+  )
   if result.solved:
-    score += 30.0 - 0.02 * len(result.path)
+    score += 35.0 - 0.02 * len(result.path)
   return score
 
 
-def _random_chromosome(rng: Random, length: int) -> Chromosome:
-  return [rng.randrange(len(DIRECTIONS)) for _ in range(length)]
-
-
 def _crossover(parent_a: Chromosome, parent_b: Chromosome, rng: Random) -> Chromosome:
-  if len(parent_a) <= 1:
-    return parent_a[:]
-  point = rng.randrange(1, len(parent_a))
-  return parent_a[:point] + parent_b[point:]
+  if not parent_a or not parent_b:
+    return parent_a[:] if parent_a else parent_b[:]
+  index_map_b: Dict[Cell, int] = {cell: idx for idx, cell in enumerate(parent_b)}
+  shared = [cell for cell in parent_a if cell in index_map_b]
+  if not shared:
+    return parent_a[:] if rng.random() < 0.5 else parent_b[:]
+  anchor = rng.choice(shared)
+  idx_a = parent_a.index(anchor)
+  idx_b = index_map_b[anchor]
+  child = parent_a[: idx_a + 1] + parent_b[idx_b + 1 :]
+  return simplify_path(child)
 
 
-def _mutate(genes: Chromosome, rng: Random, rate: float) -> Chromosome:
-  for idx in range(len(genes)):
-    if rng.random() < rate:
-      genes[idx] = rng.randrange(len(DIRECTIONS))
-  return genes
+def _mutate(
+  path: Chromosome,
+  rng: Random,
+  adjacency: Dict[Cell, List[Cell]],
+  distance_map: List[List[int]],
+  goal: Cell,
+  max_steps: int,
+  rate: float,
+) -> Chromosome:
+  if len(path) <= 1 or rng.random() > rate:
+    return path[:]
+  pivot = rng.randrange(len(path))
+  trimmed = path[: pivot + 1]
+  current = trimmed[-1]
+  for _ in range(max_steps):
+    if current == goal:
+      break
+    next_cell = biased_step(rng, current, adjacency, distance_map)
+    if next_cell is None:
+      break
+    current = next_cell
+    trimmed.append(current)
+  return simplify_path(trimmed)
 
 
 def _tournament_select(
@@ -214,7 +171,7 @@ def solve_maze_with_genetic(
   *,
   population_size: int = 80,
   generations: int = 120,
-  mutation_rate: float = 0.08,
+  mutation_rate: float = 0.05,
   capture_history: bool = False,
   seed: int | None = None,
 ) -> Dict[str, object]:
@@ -228,22 +185,28 @@ def solve_maze_with_genetic(
     raise ValueError("mutation_rate must be between 0 and 1")
 
   rng = Random(seed)
-  start, goal = _find_start_goal(maze)
+  start, goal = find_start_goal(maze)
   rows = len(maze)
   cols = len(maze[0])
-  chromosome_length = max(rows * cols // 2, rows + cols)
-  distance_map = _build_distance_map(maze, goal)
+  max_steps = max(rows * cols // 2, rows + cols)
+  distance_map = build_distance_map(maze, goal)
+  adjacency = build_adjacency(maze)
 
-  population: List[Chromosome] = [
-    _random_chromosome(rng, chromosome_length) for _ in range(population_size)
-  ]
+  population: List[Chromosome] = []
+  if population_size > 1:
+    population.extend(
+      random_path(rng, start, goal, adjacency, distance_map, max_steps)
+      for _ in range(population_size - 1)
+    )
+  population.append(greedy_path_to_goal(start, goal, adjacency, distance_map))
   best_overall: Individual | None = None
-  history: List[dict] = []
+  frames: List[dict] = []
+  last_population: List[Individual] = []
 
   for generation in range(generations):
     evaluated: List[Individual] = []
     for index, genes in enumerate(population):
-      simulation = _simulate_chromosome(genes, maze, start, goal, distance_map)
+      simulation = _evaluate_path(genes, goal, distance_map)
       fitness = _fitness(simulation, distance_map)
       evaluated.append(
         Individual(
@@ -255,16 +218,17 @@ def solve_maze_with_genetic(
         )
       )
 
+    last_population = evaluated
     evaluated.sort(key=lambda individual: individual.fitness, reverse=True)
     if best_overall is None or evaluated[0].fitness > best_overall.fitness:
       best_overall = evaluated[0]
 
     if capture_history:
       population_snapshot = _snapshot_population(evaluated, rng)
-      history.append(
+      frames.append(
         {
-          "generation": generation,
-          "population": population_snapshot,
+          "step": generation,
+          "candidates": population_snapshot,
           "best": {
             "index": evaluated[0].index,
             "path": _serialize_path(evaluated[0].path),
@@ -286,7 +250,7 @@ def solve_maze_with_genetic(
       parent_a = _tournament_select(evaluated, rng)
       parent_b = _tournament_select(evaluated, rng)
       child = _crossover(parent_a.genes, parent_b.genes, rng)
-      child = _mutate(child, rng, mutation_rate)
+      child = _mutate(child, rng, adjacency, distance_map, goal, max_steps, mutation_rate)
       next_generation.append(child)
 
     population = next_generation
@@ -304,5 +268,12 @@ def solve_maze_with_genetic(
     "path": _serialize_path(best_overall.path),
   }
   if capture_history:
-    result["history"] = history
+    result["history"] = frames
+  result["final_candidates"] = _snapshot_population(last_population, rng) if last_population else []
+  result["best_candidate"] = {
+    "index": best_overall.index,
+    "path": _serialize_path(best_overall.path),
+    "fitness": best_overall.fitness,
+    "solved": best_overall.solved,
+  }
   return result

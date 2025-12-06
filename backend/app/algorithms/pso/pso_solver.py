@@ -176,8 +176,8 @@ def _path_solved(path: Path, goal: Cell) -> bool:
 
 def solve_maze_with_pso(
   maze: Grid,
-  iterations: int = 80,
-  swarm_size: int = 30,
+  iterations: int = 240,
+  swarm_size: int = 70,
   seed: int | None = None,
   capture_history: bool = False,
 ) -> dict:
@@ -209,6 +209,7 @@ def solve_maze_with_pso(
   social = 1.8
 
   history: List[dict] = []
+  last_candidates: List[dict] = []
 
   for iteration in range(iterations):
     r1 = rng.random((swarm_size, 1))
@@ -222,7 +223,7 @@ def solve_maze_with_pso(
     np.clip(velocities, -VELOCITY_CLAMP, VELOCITY_CLAMP, out=velocities)
     positions += velocities
 
-    iteration_particles: List[dict] = []
+    iteration_candidates: List[dict] = []
     for idx, state in enumerate(states):
       velocity_vector = tuple(velocities[idx])
       for _ in range(MOVES_PER_ITERATION):
@@ -272,24 +273,25 @@ def solve_maze_with_pso(
         state.stagnation = 0
         state.solved = False
 
-      if capture_history:
-        iteration_particles.append(
-          {
-            "index": idx,
-            "path": _serialize_path(state.trace),
-            "fitness": fitness,
-            "solved": state.solved,
-          }
-        )
+      iteration_candidates.append(
+        {
+          "index": idx,
+          "path": _serialize_path(state.trace),
+          "fitness": fitness,
+          "solved": state.solved,
+        }
+      )
 
     global_best_idx = int(np.argmax(best_fitness))
+
+    last_candidates = iteration_candidates
 
     if capture_history:
       history.append(
         {
-          "iteration": iteration,
-          "particles": iteration_particles,
-          "global_best": {
+          "step": iteration,
+          "candidates": iteration_candidates,
+          "best": {
             "path": _serialize_path(states[global_best_idx].best_trace),
             "fitness": float(best_fitness[global_best_idx]),
             "solved": _path_solved(states[global_best_idx].best_trace, goal),
@@ -312,4 +314,21 @@ def solve_maze_with_pso(
   }
   if capture_history:
     result["history"] = history
+  if not last_candidates:
+    last_candidates = [
+      {
+        "index": idx,
+        "path": _serialize_path(state.trace),
+        "fitness": _fitness(state.cell, goal, len(state.trace), state.visited, distance_map),
+        "solved": state.solved,
+      }
+      for idx, state in enumerate(states)
+    ]
+  result["final_candidates"] = last_candidates
+  result["best_candidate"] = {
+    "index": global_best_idx,
+    "path": _serialize_path(best_state.best_trace),
+    "fitness": float(best_fitness[global_best_idx]),
+    "solved": result["solved"],
+  }
   return result

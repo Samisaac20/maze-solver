@@ -8,7 +8,7 @@ from typing import Iterable, List, Sequence, Tuple
 Grid = List[List[int]]
 Cell = Tuple[int, int]
 
-MAZE_SIZE = 30
+MAZE_SIZE = 15
 
 
 # List cells two steps away that we might carve toward.
