@@ -8,7 +8,7 @@ from typing import Iterable, List, Sequence, Tuple
 Grid = List[List[int]]
 Cell = Tuple[int, int]
 
-MAZE_SIZE = 20
+MAZE_SIZE = 30
 
 
 # List cells two steps away that we might carve toward.
@@ -30,8 +30,10 @@ def generate_maze(
   size: int = MAZE_SIZE,
   seed: int | None = None,
 ) -> Grid:
-  if size < 2 or size % 2 != 0:
-    raise ValueError("size must be an even integer greater than or equal to 2")
+  if size < 5:
+    raise ValueError("size must be at least 5")
+  if size % 5 != 0:
+    raise ValueError("size must be a multiple of 5 to keep width and height aligned")
 
   rng = Random(seed)
   grid_span = size * 2 + 1

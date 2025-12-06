@@ -1,3 +1,5 @@
+from random import randint
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,10 +25,11 @@ def health_check():
 @app.get("/visuals/maze")
 def visualize_maze(size: int = 6, seed: int | None = None):
   """Provide a freshly carved maze in matrix and text forms."""
-  maze = generate_maze(size, seed=seed)
+  actual_seed = seed if seed is not None else randint(0, 2**31 - 1)
+  maze = generate_maze(size, seed=actual_seed)
   return {
     "size": size,
-    "seed": seed,
+    "seed": actual_seed,
     "grid": maze,
     "text": maze_to_string(maze),
   }

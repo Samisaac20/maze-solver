@@ -171,7 +171,8 @@ def solve_maze_with_pso(
   history: List[dict] = []
 
   for iteration in range(iterations):
-    for particle in particles:
+    iteration_particles: List[dict] = []
+    for particle_index, particle in enumerate(particles):
       new_velocity: List[float] = []
       new_weights: List[float] = []
       for idx in range(len(DIRECTIONS)):
@@ -190,6 +191,18 @@ def solve_maze_with_pso(
 
       order = _order_from_weights(particle.weights)
       fitness, path, solved = _evaluate_order(maze, order)
+
+      if capture_history:
+        iteration_particles.append(
+          {
+            "index": particle_index,
+            "path": _serialize_path(path),
+            "fitness": fitness,
+            "solved": solved,
+            "best_path": _serialize_path(particle.best_path),
+            "best_fitness": particle.best_fitness,
+          }
+        )
 
       if fitness > particle.best_fitness:
         particle.best_fitness = fitness
@@ -211,10 +224,13 @@ def solve_maze_with_pso(
       history.append(
         {
           "iteration": iteration,
-          "best_fitness": global_best.best_fitness,
-          "solved": global_best.solved,
-          "path": list(global_best.best_path),
-          "direction_order": _order_from_weights(global_best.best_weights),
+          "particles": iteration_particles,
+          "global_best": {
+            "path": _serialize_path(global_best.best_path),
+            "fitness": global_best.best_fitness,
+            "solved": global_best.solved,
+            "direction_order": _order_from_weights(global_best.best_weights),
+          },
         }
       )
     if global_best.solved:
@@ -228,9 +244,12 @@ def solve_maze_with_pso(
     "iterations": iterations,
     "swarm_size": swarm_size,
     "best_fitness": global_best.best_fitness,
-    "path": global_best.best_path,
+    "path": _serialize_path(global_best.best_path),
     "direction_order": _order_from_weights(global_best.best_weights),
   }
   if capture_history:
     result["history"] = history
   return result
+# Convert a list of tuples into JSON-friendly coordinate pairs.
+def _serialize_path(path: Path) -> List[List[int]]:
+  return [[row, col] for row, col in path]
