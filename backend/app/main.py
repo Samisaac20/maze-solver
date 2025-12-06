@@ -72,6 +72,7 @@ def visualize_genetic(
   maze_seed: int | None = None,
   population_size: int = 80,
   generations: int = 120,
+  mutation_rate: float = 0.08,
 ):
   """Return placeholder data for the genetic algorithm solver."""
   maze = generate_maze(size, seed=maze_seed)
@@ -79,6 +80,7 @@ def visualize_genetic(
     maze,
     population_size=population_size,
     generations=generations,
+    mutation_rate=mutation_rate,
     capture_history=True,
   )
   return {
@@ -87,6 +89,7 @@ def visualize_genetic(
     "maze_seed": maze_seed,
     "population_size": population_size,
     "generations": generations,
+    "mutation_rate": mutation_rate,
     "solution": solution,
   }
 

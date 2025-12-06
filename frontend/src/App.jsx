@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import AntColonyControls from './AntColonyControls';
-import FireflyControls from './FireflyControls';
-import GeneticControls from './GeneticControls';
-import PsoControls from './PsoControls';
+import AntColonyControls from './algorithms/AntColonyControls';
+import FireflyControls from './algorithms/FireflyControls';
+import GeneticControls from './algorithms/GeneticControls';
+import PsoControls from './algorithms/PsoControls';
+import { drawMaze as drawMazeOnCanvas } from './mazeRenderer';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
-const CELL_SIZE = 24;
 const ALGORITHMS = [
   { id: 'pso', label: 'Particle Swarm' },
   { id: 'genetic', label: 'Genetic Algorithm' },
@@ -44,14 +44,19 @@ function App() {
   const [desiredSize, setDesiredSize] = useState(() => normalizeSize(30));
   const [iterations, setIterations] = useState(80);
   const [swarmSize, setSwarmSize] = useState(30);
+  const [gaPopulation, setGaPopulation] = useState(80);
+  const [gaGenerations, setGaGenerations] = useState(120);
+  const [gaMutationRate, setGaMutationRate] = useState(0.08);
   const [currentStep, setCurrentStep] = useState(0);
   const [frameProgress, setFrameProgress] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [speedMs, setSpeedMs] = useState(100);
+  const [runFailed, setRunFailed] = useState(false);
   const algorithmDisplay = ALGORITHM_LABELS[activeAlgorithm];
   const isPsoActive = activeAlgorithm === 'pso';
+  const isGeneticActive = activeAlgorithm === 'genetic';
 
   const renderAlgorithmControls = () => {
     if (activeAlgorithm === 'pso') {
@@ -65,7 +70,16 @@ function App() {
       );
     }
     if (activeAlgorithm === 'genetic') {
-      return <GeneticControls />;
+      return (
+        <GeneticControls
+          populationSize={gaPopulation}
+          generations={gaGenerations}
+          mutationRate={gaMutationRate}
+          onPopulationChange={setGaPopulation}
+          onGenerationsChange={setGaGenerations}
+          onMutationRateChange={setGaMutationRate}
+        />
+      );
     }
     if (activeAlgorithm === 'firefly') {
       return <FireflyControls />;
@@ -80,102 +94,44 @@ function App() {
     return history[Math.min(currentStep, history.length - 1)];
   }, [history, currentStep]);
 
-  const activeParticles = activeFrame?.particles ?? [];
-  const globalBestPath = activeFrame?.global_best?.path ?? solution?.path ?? [];
-
-  const drawMaze = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || maze.length === 0) {
-      return;
+  const activeExplorers = useMemo(() => {
+    if (!activeFrame) {
+      return [];
     }
+    if (isGeneticActive) {
+      return activeFrame.population ?? [];
+    }
+    return activeFrame.particles ?? [];
+  }, [activeFrame, isGeneticActive]);
 
-    const rows = maze.length;
-    const cols = maze[0].length;
-    canvas.width = cols * CELL_SIZE;
-    canvas.height = rows * CELL_SIZE;
+  const frameBest = useMemo(() => {
+    if (!activeFrame) {
+      return null;
+    }
+    if (isGeneticActive) {
+      return activeFrame.best ?? null;
+    }
+    return activeFrame.global_best ?? null;
+  }, [activeFrame, isGeneticActive]);
 
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const bestPath = frameBest?.path ?? solution?.path ?? [];
+  const bestFitness = frameBest?.fitness ?? solution?.best_fitness ?? null;
 
-    maze.forEach((row, rIdx) => {
-      row.forEach((cell, cIdx) => {
-        ctx.fillStyle = cell === 1 ? '#1e293b' : '#f8fafc';
-        ctx.fillRect(cIdx * CELL_SIZE, rIdx * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      });
+  const renderMaze = () => {
+    drawMazeOnCanvas({
+      canvas: canvasRef.current,
+      maze,
+      explorers: activeExplorers,
+      bestPath,
+      solution,
+      frameProgress,
+      isRunning,
     });
-
-    ctx.strokeStyle = '#334155';
-    ctx.strokeRect(0, 0, canvas.width, canvas.height);
-    const drawPath = (pathPoints, color, width, alpha = 1) => {
-      if (!pathPoints || pathPoints.length === 0) return;
-      const progress = isRunning ? frameProgress : 1;
-      const visibleCount = Math.max(1, Math.floor(pathPoints.length * progress));
-      const segment = pathPoints.slice(0, visibleCount);
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = alpha;
-      ctx.lineWidth = width;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      segment.forEach(([row, col], index) => {
-        const x = col * CELL_SIZE + CELL_SIZE / 2;
-        const y = row * CELL_SIZE + CELL_SIZE / 2;
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    };
-
-    if (activeParticles.length > 0) {
-      activeParticles.forEach((particle, index) => {
-        const hue = Math.round((index / activeParticles.length) * 360);
-        const color = `hsla(${hue}, 70%, 65%, 0.65)`;
-        drawPath(particle.path, color, CELL_SIZE / 4, 0.5);
-        const visibleCount = Math.max(1, Math.floor(particle.path.length * (isRunning ? frameProgress : 1)));
-        const last = particle.path?.[Math.min(visibleCount - 1, particle.path.length - 1)];
-        if (last) {
-          const [row, col] = last;
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(
-            col * CELL_SIZE + CELL_SIZE / 2,
-            row * CELL_SIZE + CELL_SIZE / 2,
-            CELL_SIZE / 6,
-            0,
-            Math.PI * 2,
-          );
-          ctx.fill();
-        }
-      });
-    }
-
-    if (globalBestPath.length > 0) {
-      drawPath(globalBestPath, '#ff0000ff', CELL_SIZE / 2.5, 1);
-    }
-
-    const start = solution?.start;
-    const goal = solution?.goal;
-    if (start) {
-      ctx.fillStyle = '#10b981';
-      ctx.fillRect(
-        start[1] * CELL_SIZE,
-        start[0] * CELL_SIZE,
-        CELL_SIZE,
-        CELL_SIZE,
-      );
-    }
-    if (goal) {
-      ctx.fillStyle = '#ef4444';
-      ctx.fillRect(goal[1] * CELL_SIZE, goal[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    }
   };
 
   useEffect(() => {
-    drawMaze();
-  }, [maze, activeParticles, globalBestPath, solution, frameProgress, isRunning]);
+    renderMaze();
+  }, [maze, activeExplorers, bestPath, solution, frameProgress, isRunning]);
 
   useEffect(() => {
     if (!isRunning || history.length === 0) {
@@ -213,6 +169,7 @@ function App() {
   const fetchMaze = async (sizeOverride = desiredSize) => {
     setLoading(true);
     setError('');
+    setRunFailed(false);
     try {
       const url = new URL(`${API_BASE}/visuals/maze`);
       url.searchParams.set('size', sizeOverride);
@@ -245,6 +202,7 @@ function App() {
   ) => {
     setLoading(true);
     setError('');
+    setRunFailed(false);
     try {
       const url = new URL(`${API_BASE}/visuals/pso`);
       url.searchParams.set('size', sizeOverride);
@@ -264,27 +222,95 @@ function App() {
       setMazeSeed(data.maze_seed ?? seedOverride);
       const historyData = data.solution?.history ?? [];
       setHistory(historyData);
-      setCurrentStep(0);
-      setFrameProgress(0);
-      setIsRunning(historyData.length > 0);
+      const solved = Boolean(data.solution?.solved);
+      setRunFailed(!solved);
+      if (!solved && historyData.length > 0) {
+        setCurrentStep(historyData.length - 1);
+        setFrameProgress(1);
+        setIsRunning(false);
+      } else {
+        setCurrentStep(0);
+        setFrameProgress(0);
+        setIsRunning(historyData.length > 0);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
+      setRunFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchGeneticSolution = async (
+    sizeOverride = desiredSize,
+    seedOverride = mazeSeed,
+    populationOverride = gaPopulation,
+    generationOverride = gaGenerations,
+    mutationOverride = gaMutationRate,
+  ) => {
+    setLoading(true);
+    setError('');
+    setRunFailed(false);
+    try {
+      const url = new URL(`${API_BASE}/visuals/genetic`);
+      url.searchParams.set('size', sizeOverride);
+      if (seedOverride !== null && seedOverride !== undefined) {
+        url.searchParams.set('maze_seed', seedOverride);
+      }
+      url.searchParams.set('population_size', populationOverride);
+      url.searchParams.set('generations', generationOverride);
+      url.searchParams.set('mutation_rate', mutationOverride);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to run solver');
+      }
+      const data = await response.json();
+      setMaze(data.maze ?? []);
+      setSolution(data.solution ?? null);
+      setMazeSize(data.size ?? sizeOverride);
+      setMazeSeed(data.maze_seed ?? seedOverride);
+      const historyData = data.solution?.history ?? [];
+      setHistory(historyData);
+      const solved = Boolean(data.solution?.solved);
+      setRunFailed(!solved);
+      if (!solved && historyData.length > 0) {
+        setCurrentStep(historyData.length - 1);
+        setFrameProgress(1);
+        setIsRunning(false);
+      } else {
+        setCurrentStep(0);
+        setFrameProgress(0);
+        setIsRunning(historyData.length > 0);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      setRunFailed(true);
     } finally {
       setLoading(false);
     }
   };
 
   const handleStart = async () => {
-    if (!isPsoActive) {
-      setError(`${algorithmDisplay} visualisation is coming soon.`);
-      return;
-    }
     if (desiredSize < MIN_SIZE || desiredSize > MAX_SIZE || desiredSize % 5 !== 0) {
       setError(`Maze size must be a multiple of 5 between ${MIN_SIZE} and ${MAX_SIZE}.`);
       return;
     }
-    if (iterations <= 0 || swarmSize <= 0) {
-      setError('Iterations and swarm size must be positive integers.');
+    if (isPsoActive) {
+      if (iterations <= 0 || swarmSize <= 0) {
+        setError('Iterations and swarm size must be positive integers.');
+        return;
+      }
+    } else if (isGeneticActive) {
+      if (gaPopulation <= 0 || gaGenerations <= 0) {
+        setError('Population size and generations must be positive.');
+        return;
+      }
+      if (Number.isNaN(gaMutationRate) || gaMutationRate <= 0 || gaMutationRate > 1) {
+        setError('Mutation rate must be between 0 and 1.');
+        return;
+      }
+    } else {
+      setError(`${algorithmDisplay} visualisation is coming soon.`);
       return;
     }
     setError('');
@@ -295,7 +321,11 @@ function App() {
     if (seed === null || seed === undefined) {
       return;
     }
-    fetchPsoSolution(desiredSize, seed, iterations, swarmSize);
+    if (isPsoActive) {
+      fetchPsoSolution(desiredSize, seed, iterations, swarmSize);
+    } else if (isGeneticActive) {
+      fetchGeneticSolution(desiredSize, seed, gaPopulation, gaGenerations, gaMutationRate);
+    }
   };
 
   const handleStop = () => {
@@ -311,9 +341,25 @@ function App() {
     setCurrentStep(0);
     setFrameProgress(0);
     setError('');
+    setRunFailed(false);
   };
 
+  const trackedLabel = isGeneticActive ? 'Population tracked' : 'Particles tracked';
+  const recordedLabel = isGeneticActive ? 'Generations recorded' : 'Iterations recorded';
+  const playbackLabel = isGeneticActive ? 'Generation' : 'Iteration';
+  const trackedCount =
+    activeExplorers.length
+    || (isGeneticActive ? solution?.population_size : solution?.swarm_size)
+    || '-';
+  const currentFrameLabel = history.length
+    ? `${playbackLabel} ${Math.min(currentStep + 1, history.length)}/${history.length}`
+    : '-';
+  const bestFitnessDisplay = typeof bestFitness === 'number' ? bestFitness.toFixed(2) : '-';
+
   const statusText = useMemo(() => {
+    if (runFailed) {
+      return 'search failed';
+    }
     if (!solution) {
       return 'Ready to start visualizing the maze solver.';
     }
@@ -321,7 +367,7 @@ function App() {
       return `Solved in ${solution.path.length} steps.`;
     }
     return 'Solver is exploring...';
-  }, [solution]);
+  }, [solution, runFailed]);
 
   const adjustSize = (delta) => {
     setDesiredSize((prev) => normalizeSize(prev + delta));
@@ -351,6 +397,7 @@ function App() {
     setCurrentStep(0);
     setFrameProgress(0);
     setError('');
+    setRunFailed(false);
   }, [activeAlgorithm]);
 
   return (
@@ -425,13 +472,10 @@ function App() {
           <ul>
             <li>Algorithm: {algorithmDisplay}</li>
             <li>Maze size: {mazeSize ?? (maze.length ? `${maze.length} x ${maze[0].length}` : '-')}</li>
-            <li>Particles tracked: {activeParticles.length || solution?.swarm_size || '-'}</li>
-            <li>Iterations recorded: {history.length}</li>
-            <li>Current frame: {history.length ? `${currentStep + 1}/${history.length}` : '-'}</li>
-            <li>
-              Global best fitness:{' '}
-              {activeFrame?.global_best?.fitness?.toFixed(2) ?? solution?.best_fitness ?? '-'}
-            </li>
+            <li>{trackedLabel}: {trackedCount}</li>
+            <li>{recordedLabel}: {history.length}</li>
+            <li>Current frame: {currentFrameLabel}</li>
+            <li>Best fitness: {bestFitnessDisplay}</li>
           </ul>
           {renderAlgorithmControls()}
         </div>
