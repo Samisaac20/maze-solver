@@ -66,18 +66,26 @@ def _evaluate_path(
 
 def _fitness(result: SimulationResult, distance_map: List[List[int]]) -> float:
   distance = distance_map[result.final_cell[0]][result.final_cell[1]]
-  distance_score = 1.0 / (1 + distance)
-  progress_score = 1.0 / (1 + result.best_distance)
+  start = result.path[0]
+  start_distance = distance_map[start[0]][start[1]]
+  rows = len(distance_map)
+  cols = len(distance_map[0]) if rows else 0
+  progress_normalizer = max(1, start_distance if start_distance < 10**8 else rows + cols)
+  best_progress = 1.0 - min(result.best_distance, progress_normalizer) / progress_normalizer
+  final_progress = 1.0 - min(distance, progress_normalizer) / progress_normalizer
+  best_progress = max(0.0, best_progress)
+  final_progress = max(0.0, final_progress)
   coverage = result.visited_unique / max(1, len(result.path))
   path_efficiency = 1.0 / max(1, len(result.path))
   score = (
-    0.5 * progress_score
-    + 0.35 * distance_score
-    + 0.25 * coverage
-    + 0.15 * path_efficiency
+    0.5 * best_progress
+    + 0.3 * final_progress
+    + 0.15 * coverage
+    + 0.05 * path_efficiency
   )
   if result.solved:
-    score += 35.0 - 0.02 * len(result.path)
+    solved_bonus = 50.0 - 0.001 * len(result.path)
+    score += max(10.0, solved_bonus)
   return score
 
 
