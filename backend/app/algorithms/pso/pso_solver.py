@@ -1,4 +1,4 @@
-"""Particle swarm optimizer that moves directly through the maze grid."""
+"""Particle swarm optimizer that moves directly through the maze grid with XAI enhancements."""
 
 from __future__ import annotations
 
@@ -181,7 +181,7 @@ def solve_maze_with_pso(
   seed: int | None = None,
   capture_history: bool = False,
 ) -> dict:
-  """Search the maze with a swarm of particles and optionally capture their history."""
+  """Search the maze with a swarm of particles and optionally capture their history with XAI data."""
   if iterations <= 0:
     raise ValueError("iterations must be positive")
   if swarm_size <= 0:
@@ -274,12 +274,14 @@ def solve_maze_with_pso(
         state.stagnation = 0
         state.solved = False
 
+      # XAI Enhancement: Include velocity vector in candidate data
       iteration_candidates.append(
         {
           "index": idx,
           "path": _serialize_path(state.trace),
           "fitness": fitness,
           "solved": state.solved,
+          "velocity": [float(velocities[idx][0]), float(velocities[idx][1])],  # XAI data
         }
       )
 
@@ -322,6 +324,7 @@ def solve_maze_with_pso(
         "path": _serialize_path(state.trace),
         "fitness": _fitness(state.cell, goal, len(state.trace), state.visited, distance_map),
         "solved": state.solved,
+        "velocity": [float(velocities[idx][0]), float(velocities[idx][1])],  # XAI data
       }
       for idx, state in enumerate(states)
     ]
@@ -331,5 +334,6 @@ def solve_maze_with_pso(
     "path": _serialize_path(best_state.best_trace),
     "fitness": float(best_fitness[global_best_idx]),
     "solved": result["solved"],
+    "velocity": [float(velocities[global_best_idx][0]), float(velocities[global_best_idx][1])],  # XAI data
   }
   return result

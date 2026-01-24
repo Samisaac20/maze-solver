@@ -179,7 +179,7 @@ def solve_maze_with_genetic(
   *,
   population_size: int = 80,
   generations: int = 120,
-  mutation_rate: float = 0.05,
+  mutation_rate: float = 0.1,
   capture_history: bool = False,
   seed: int | None = None,
 ) -> Dict[str, object]:

@@ -17,6 +17,15 @@ const ALGORITHMS = [
   { id: 'ant', label: 'Ant Colony', name: 'Ant Colony Optimization' },
 ];
 
+const COMPLEXITY_PRESETS = [
+  { id: 'trivial', label: 'Trivial', stars: '★☆☆☆☆', description: 'Perfect maze, easiest' },
+  { id: 'easy', label: 'Easy', stars: '★★☆☆☆', description: 'Minimal complexity' },
+  { id: 'medium', label: 'Medium', stars: '★★★☆☆', description: 'Balanced' },
+  { id: 'hard', label: 'Hard', stars: '★★★★☆', description: 'Challenging' },
+  { id: 'extreme', label: 'Extreme', stars: '★★★★★', description: 'Maximum confusion' },
+  { id: 'algorithm_test', label: 'Algorithm Test', stars: '★★★☆☆', description: 'XAI optimized' },
+];
+
 const EXPLANATIONS = {
   pso: [
     'Launch a swarm of explorers from the maze entrance.',
@@ -56,7 +65,7 @@ const fetchApi = async (path, params) => {
 
 function App() {
   const canvasRef = useRef(null);
-  
+
   const [state, setState] = useState({
     maze: [],
     history: [],
@@ -77,6 +86,20 @@ function App() {
     gaPopulation: 80,
     gaGenerations: 120,
     gaMutationRate: 0.05,
+    // XAI visualization options
+    showVelocities: true,
+    showHeatmap: true,
+    showTopPerformers: true,
+    showMetrics: true,
+    // Complexity controls
+    complexityMode: 'preset', // 'preset' or 'custom'
+    selectedPreset: 'medium',
+    complexity: 0.5,
+    deadEndFactor: 0.3,
+    loopDensity: 0.3,
+    widthVariation: 0.2,
+    chamberDensity: 0.1,
+    mazeAnalysis: null,
   });
 
   const update = (changes) => setState(s => ({ ...s, ...changes }));
@@ -88,15 +111,31 @@ function App() {
     frameProgress: 0,
   });
 
+  const getComplexityParams = () => {
+    if (state.complexityMode === 'preset') {
+      return { preset: state.selectedPreset };
+    } else {
+      return {
+        complexity: state.complexity,
+        dead_end_factor: state.deadEndFactor,
+        loop_density: state.loopDensity,
+        width_variation: state.widthVariation,
+        chamber_density: state.chamberDensity,
+      };
+    }
+  };
+
   const fetchMaze = async (size = state.desiredSize) => {
     update({ loading: true, error: '', runFailed: false });
     try {
-      const data = await fetchApi('maze', { size });
+      const params = { size, ...getComplexityParams() };
+      const data = await fetchApi('maze', params);
       update({
         maze: data.grid ?? [],
         mazeSeed: data.seed ?? null,
         solution: null,
         mazeSize: data.size ?? size,
+        mazeAnalysis: data.analysis ?? null,
       });
       resetPlayback();
       return data.seed ?? null;
@@ -110,14 +149,18 @@ function App() {
 
   const runSolver = async () => {
     const { desiredSize, mazeSeed, algorithm } = state;
-    
+
     if (desiredSize < MIN_SIZE || desiredSize > MAX_SIZE || desiredSize % 5 !== 0) {
       update({ error: `Size must be 5-step multiple between ${MIN_SIZE}-${MAX_SIZE}` });
       return;
     }
 
-    const params = { size: desiredSize, maze_seed: mazeSeed };
-    
+    const params = {
+      size: desiredSize,
+      maze_seed: mazeSeed,
+      ...getComplexityParams()
+    };
+
     if (algorithm === 'pso') {
       if (state.iterations <= 0 || state.swarmSize <= 0) {
         update({ error: 'Iterations and swarm size must be positive' });
@@ -149,6 +192,8 @@ function App() {
       seed = await fetchMaze(desiredSize);
       if (!seed) return;
       params.maze_seed = seed;
+      // Re-add complexity params after fetchMaze
+      Object.assign(params, getComplexityParams());
     }
 
     update({ loading: true, error: '', runFailed: false });
@@ -156,12 +201,13 @@ function App() {
       const data = await fetchApi(algorithm, params);
       const hist = data.solution?.history ?? [];
       const solved = Boolean(data.solution?.solved);
-      
+
       update({
         maze: data.maze ?? [],
         solution: data.solution ?? null,
         mazeSize: data.size ?? desiredSize,
         mazeSeed: data.maze_seed ?? seed,
+        mazeAnalysis: data.maze_analysis ?? null,
         history: hist,
         runFailed: !solved,
         currentStep: !solved && hist.length > 0 ? hist.length - 1 : 0,
@@ -182,6 +228,7 @@ function App() {
       solution: null,
       mazeSize: null,
       mazeSeed: null,
+      mazeAnalysis: null,
       error: '',
       runFailed: false,
     });
@@ -190,7 +237,7 @@ function App() {
   // Playback animation loop
   useEffect(() => {
     if (!state.isRunning || !state.history.length) return;
-    
+
     let frameId;
     let lastTime = performance.now();
     const stepDur = Math.max(20, Math.min(1000, state.speedMs));
@@ -198,7 +245,7 @@ function App() {
     const tick = (time) => {
       const delta = time - lastTime;
       lastTime = time;
-      
+
       setState(s => {
         const nextProgress = s.frameProgress + delta / stepDur;
         if (nextProgress >= 1) {
@@ -210,7 +257,7 @@ function App() {
         }
         return { ...s, frameProgress: nextProgress };
       });
-      
+
       frameId = requestAnimationFrame(tick);
     };
 
@@ -218,14 +265,16 @@ function App() {
     return () => cancelAnimationFrame(frameId);
   }, [state.isRunning, state.history.length, state.speedMs]);
 
-  // Auto-fetch maze on size change
+  // Auto-fetch maze on size or complexity change
   useEffect(() => {
     resetPlayback();
     const { desiredSize } = state;
     if (desiredSize >= MIN_SIZE && desiredSize <= MAX_SIZE && desiredSize % 5 === 0) {
       fetchMaze(desiredSize);
     }
-  }, [state.desiredSize]);
+  }, [state.desiredSize, state.complexityMode, state.selectedPreset,
+  state.complexity, state.deadEndFactor, state.loopDensity,
+  state.widthVariation, state.chamberDensity]);
 
   // Clear solution on algorithm change
   useEffect(() => {
@@ -233,10 +282,10 @@ function App() {
     update({ solution: null, error: '', runFailed: false });
   }, [state.algorithm]);
 
-  // Canvas rendering
+  // Canvas rendering with XAI options
   useEffect(() => {
     if (!canvasRef.current) return;
-    
+
     const frame = state.history[Math.min(state.currentStep, state.history.length - 1)];
     const fallbackCandidates = state.solution?.final_candidates ?? [];
     const explorers = frame?.candidates ?? fallbackCandidates;
@@ -251,20 +300,27 @@ function App() {
       solution: state.solution,
       frameProgress: state.frameProgress,
       isRunning: state.isRunning,
+      algorithmType: state.algorithm,
+      showVelocities: state.showVelocities,
+      showHeatmap: state.showHeatmap,
+      showTopPerformers: state.showTopPerformers,
+      showMetrics: state.showMetrics,
     });
-  }, [canvasRef, state.maze, state.history, state.currentStep, state.solution, 
-      state.frameProgress, state.isRunning]);
+  }, [canvasRef, state.maze, state.history, state.currentStep, state.solution,
+    state.frameProgress, state.isRunning, state.algorithm, state.showVelocities,
+    state.showHeatmap, state.showTopPerformers, state.showMetrics]);
 
   // Computed values
   const algo = ALGORITHMS.find(a => a.id === state.algorithm);
   const isGenetic = state.algorithm === 'genetic';
-  
-  const sizeLabel = state.mazeSize ?? (state.maze.length ? 
+  const isPso = state.algorithm === 'pso';
+
+  const sizeLabel = state.mazeSize ?? (state.maze.length ?
     `${state.maze.length} x ${state.maze[0].length}` : '-');
-  
+
   const frame = state.history[state.currentStep];
   const explorers = frame?.candidates ?? state.solution?.final_candidates ?? [];
-  const trackedCount = explorers.length || 
+  const trackedCount = explorers.length ||
     (isGenetic ? state.solution?.population_size : state.solution?.swarm_size) || '-';
 
   const currentFrameLabel = state.history.length ?
@@ -276,8 +332,17 @@ function App() {
 
   const statusText = state.runFailed ? 'Search failed.' :
     !state.solution ? 'Ready to start visualising the maze solver.' :
-    state.solution.solved ? `Solved in ${state.solution.path.length} steps.` :
-    'Solver is exploring...';
+      state.solution.solved ? `Solved in ${state.solution.path.length} steps.` :
+        'Solver is exploring...';
+
+  // Calculate additional XAI metrics
+  const explorationCoverage = explorers.length > 0 ? (() => {
+    const visited = new Set();
+    explorers.forEach(e => {
+      if (e.path) e.path.forEach(([r, c]) => visited.add(`${r},${c}`));
+    });
+    return ((visited.size / (state.maze.length * (state.maze[0]?.length || 1))) * 100).toFixed(1);
+  })() : '-';
 
   const algorithmControls = (() => {
     switch (state.algorithm) {
@@ -309,7 +374,8 @@ function App() {
   return (
     <div className="app">
       <header>
-        <h1>Maze Solver Visualiser</h1>
+        <h1>Maze Solver Visualiser with XAI</h1>
+        <p>Explainable AI visualization of evolutionary algorithms</p>
       </header>
 
       <div className="algorithm-selector">
@@ -323,6 +389,104 @@ function App() {
             {a.label}
           </button>
         ))}
+      </div>
+
+      {/* Maze Complexity Controls */}
+      <div className="complexity-controls">
+        <h3>Maze Complexity</h3>
+        <div className="complexity-mode-selector">
+          <label className="mode-toggle">
+            <input
+              type="radio"
+              checked={state.complexityMode === 'preset'}
+              onChange={() => update({ complexityMode: 'preset' })}
+            />
+            <span>Use Preset</span>
+          </label>
+          <label className="mode-toggle">
+            <input
+              type="radio"
+              checked={state.complexityMode === 'custom'}
+              onChange={() => update({ complexityMode: 'custom' })}
+            />
+            <span>Custom Settings</span>
+          </label>
+        </div>
+
+        {state.complexityMode === 'preset' ? (
+          <div className="preset-selector">
+            {COMPLEXITY_PRESETS.map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                className={`preset-button ${state.selectedPreset === preset.id ? 'active' : ''}`}
+                onClick={() => update({ selectedPreset: preset.id })}
+                title={preset.description}
+              >
+                <div className="preset-label">{preset.label}</div>
+                <div className="preset-stars">{preset.stars}</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="custom-complexity">
+            <label className="complexity-slider">
+              <span>Master Complexity: {(state.complexity * 100).toFixed(0)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={state.complexity}
+                onChange={e => update({ complexity: parseFloat(e.target.value) })}
+              />
+            </label>
+            <label className="complexity-slider">
+              <span>Dead Ends: {(state.deadEndFactor * 100).toFixed(0)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={state.deadEndFactor}
+                onChange={e => update({ deadEndFactor: parseFloat(e.target.value) })}
+              />
+            </label>
+            <label className="complexity-slider">
+              <span>Loop Density: {(state.loopDensity * 100).toFixed(0)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={state.loopDensity}
+                onChange={e => update({ loopDensity: parseFloat(e.target.value) })}
+              />
+            </label>
+            <label className="complexity-slider">
+              <span>Width Variation: {(state.widthVariation * 100).toFixed(0)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={state.widthVariation}
+                onChange={e => update({ widthVariation: parseFloat(e.target.value) })}
+              />
+            </label>
+            <label className="complexity-slider">
+              <span>Chambers: {(state.chamberDensity * 100).toFixed(0)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={state.chamberDensity}
+                onChange={e => update({ chamberDensity: parseFloat(e.target.value) })}
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="controls">
@@ -357,25 +521,122 @@ function App() {
         <button onClick={handleReset} disabled={state.loading}>Reset</button>
       </div>
 
+      {/* XAI Visualization Controls */}
+      <div className="xai-controls">
+        <h3>XAI Visualization Options</h3>
+        <div className="xai-toggles">
+          {isPso && (
+            <label className="xai-toggle">
+              <input
+                type="checkbox"
+                checked={state.showVelocities}
+                onChange={e => update({ showVelocities: e.target.checked })}
+              />
+              <span>Show Velocity Vectors (PSO)</span>
+            </label>
+          )}
+          {isGenetic && (
+            <label className="xai-toggle">
+              <input
+                type="checkbox"
+                checked={state.showHeatmap}
+                onChange={e => update({ showHeatmap: e.target.checked })}
+              />
+              <span>Show Fitness Heatmap (GA)</span>
+            </label>
+          )}
+          <label className="xai-toggle">
+            <input
+              type="checkbox"
+              checked={state.showTopPerformers}
+              onChange={e => update({ showTopPerformers: e.target.checked })}
+            />
+            <span>Highlight Top 5 Performers</span>
+          </label>
+          <label className="xai-toggle">
+            <input
+              type="checkbox"
+              checked={state.showMetrics}
+              onChange={e => update({ showMetrics: e.target.checked })}
+            />
+            <span>Show Diversity & Convergence Metrics</span>
+          </label>
+        </div>
+      </div>
+
       {state.error && <div className="status error">{state.error}</div>}
       <div className="status">{state.loading ? 'Loading data...' : statusText}</div>
 
       <section className="visuals">
         <canvas ref={canvasRef} />
         <div className="details">
-          <h2>Playback Details</h2>
-          <ul>
-            <li>Algorithm: {algo?.name}</li>
-            <li>Maze size: {sizeLabel}</li>
-            <li>{isGenetic ? 'Population' : 'Particles'} tracked: {trackedCount}</li>
-            <li>{isGenetic ? 'Generations' : 'Iterations'} recorded: {state.history.length}</li>
-            <li>Current frame: {currentFrameLabel}</li>
-            <li>Best fitness: {bestFitness}</li>
-          </ul>
-          {algorithmControls}
+          {/* Playback Details Section */}
+          <div className="details-section">
+            <h2>Playback Details</h2>
+            <ul>
+              <li>Algorithm: {algo?.name}</li>
+              <li>Maze size: {sizeLabel}</li>
+              <li>{isGenetic ? 'Population' : 'Particles'} tracked: {trackedCount}</li>
+              <li>{isGenetic ? 'Generations' : 'Iterations'} recorded: {state.history.length}</li>
+              <li>Current frame: {currentFrameLabel}</li>
+              <li>Best fitness: {bestFitness}</li>
+              <li>Exploration coverage: {explorationCoverage}%</li>
+            </ul>
+          </div>
+
+          {/* Maze Complexity Analysis Section */}
+          {state.mazeAnalysis && (
+            <div className="details-section">
+              <h2>Maze Complexity</h2>
+              <ul>
+                <li>Junctions: {state.mazeAnalysis.junctions}</li>
+                <li>Dead ends: {state.mazeAnalysis.dead_ends}</li>
+                <li>Openness: {(state.mazeAnalysis.openness * 100).toFixed(1)}%</li>
+                <li>Decision points: {state.mazeAnalysis.decisions_per_100_cells.toFixed(1)} per 100 cells</li>
+              </ul>
+            </div>
+          )}
+
+          {/* XAI Metrics Section */}
+          {state.solution && (
+            <div className="details-section">
+              <h2>XAI Insights</h2>
+              <ul>
+                <li>Solution quality: {state.solution.solved ? '✓ Solved' : '✗ Incomplete'}</li>
+                {state.solution.path && (
+                  <li>Path length: {state.solution.path.length} steps</li>
+                )}
+                {isPso && explorers.length > 0 && (
+                  <>
+                    <li>Avg velocity: {
+                      (explorers.reduce((sum, e) => {
+                        if (!e.velocity) return sum;
+                        const [vx, vy] = e.velocity;
+                        return sum + Math.sqrt(vx * vx + vy * vy);
+                      }, 0) / explorers.length).toFixed(3)
+                    }</li>
+                  </>
+                )}
+                {isGenetic && (
+                  <>
+                    <li>Mutation rate: {(state.gaMutationRate * 100).toFixed(1)}%</li>
+                    <li>Elite preserved: {Math.max(1, Math.floor(state.gaPopulation / 10))}</li>
+                  </>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {/* Algorithm Controls Section */}
+          <div className="details-section">
+            <h2>Algorithm Parameters</h2>
+            {algorithmControls}
+          </div>
+
+          {/* Algorithm Explanation Section */}
           {EXPLANATIONS[state.algorithm] && (
-            <div className="explanation">
-              <h3>How this method solves the maze</h3>
+            <div className="details-section">
+              <h2>How This Works</h2>
               <ul>
                 {EXPLANATIONS[state.algorithm].map((p, i) => <li key={i}>{p}</li>)}
               </ul>
