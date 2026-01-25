@@ -3,11 +3,11 @@ from random import randint
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .algorithms.ant_colony import solve_maze_with_ant_colony
-from .algorithms.firefly import solve_maze_with_firefly
-from .algorithms.genetic import solve_maze_with_genetic
-from .algorithms.pso import solve_maze_with_pso
-from .maze_logic.maze_gen import generate_maze, maze_to_string, analyze_maze_complexity, get_complexity_preset
+from algorithms.ant_colony import solve_maze_with_ant_colony
+from algorithms.firefly import solve_maze_with_firefly
+from algorithms.genetic import solve_maze_with_genetic
+from algorithms.pso import solve_maze_with_pso
+from maze_logic.maze_gen import generate_maze, maze_to_string, analyze_maze_complexity, get_complexity_preset
 
 DEFAULT_SIZE = 15
 PSO_DEFAULTS = {"iterations": 240, "swarm_size": 70}
@@ -273,6 +273,8 @@ def visualize_firefly(
   maze_seed: int | None = None,
   fireflies: int = FIREFLY_DEFAULTS["fireflies"],
   absorption: float = FIREFLY_DEFAULTS["absorption"],
+  iterations: int = 200,
+  randomness: float = 0.2,
   complexity: float | None = None,
   dead_end_factor: float | None = None,
   loop_density: float | None = None,
@@ -288,6 +290,8 @@ def visualize_firefly(
     maze,
     fireflies=fireflies,
     absorption=absorption,
+    iterations=iterations,
+    randomness=randomness,
     capture_history=True,
   )
   
@@ -300,6 +304,8 @@ def visualize_firefly(
     extra={
       "fireflies": fireflies,
       "absorption": absorption,
+      "iterations": iterations,
+      "randomness": randomness,
       "solution": solution,
       "maze_analysis": analysis,
     },
@@ -311,7 +317,10 @@ def visualize_ant_colony(
   size: int = DEFAULT_SIZE,
   maze_seed: int | None = None,
   ants: int = ANT_DEFAULTS["ants"],
+  iterations: int = 150,
   evaporation_rate: float = ANT_DEFAULTS["evaporation_rate"],
+  alpha: float = 1.0,
+  beta: float = 2.0,
   complexity: float | None = None,
   dead_end_factor: float | None = None,
   loop_density: float | None = None,
@@ -326,7 +335,10 @@ def visualize_ant_colony(
   solution = solve_maze_with_ant_colony(
     maze,
     ants=ants,
+    iterations=iterations,
     evaporation_rate=evaporation_rate,
+    alpha=alpha,
+    beta=beta,
     capture_history=True,
   )
   
@@ -338,7 +350,10 @@ def visualize_ant_colony(
     seed=resolved_seed,
     extra={
       "ants": ants,
+      "iterations": iterations,
       "evaporation_rate": evaporation_rate,
+      "alpha": alpha,
+      "beta": beta,
       "solution": solution,
       "maze_analysis": analysis,
     },

@@ -78,6 +78,49 @@ const drawVelocityVectors = (ctx, explorers, progress) => {
   });
 };
 
+// Draw pheromone trails for Ant Colony Optimization
+const drawPheromoneTrails = (ctx, pheromoneMap, rows, cols) => {
+  if (!pheromoneMap) return;
+
+  ctx.globalAlpha = 0.4;
+
+  Object.entries(pheromoneMap).forEach(([key, strength]) => {
+    const [row, col] = key.split(',').map(Number);
+
+    // Color: Blue to cyan to green based on strength
+    const hue = 180 + (strength * 60); // 180=cyan, 240=blue, 120=green
+    const saturation = 70 + (strength * 30);
+    const lightness = 40 + (strength * 30);
+
+    ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
+    // Draw stronger trails with glow
+    if (strength > 0.5) {
+      const gradient = ctx.createRadialGradient(
+        col * CELL_SIZE + CELL_SIZE / 2,
+        row * CELL_SIZE + CELL_SIZE / 2,
+        0,
+        col * CELL_SIZE + CELL_SIZE / 2,
+        row * CELL_SIZE + CELL_SIZE / 2,
+        CELL_SIZE
+      );
+      gradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, ${strength * 0.6})`);
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(
+        col * CELL_SIZE - CELL_SIZE / 2,
+        row * CELL_SIZE - CELL_SIZE / 2,
+        CELL_SIZE * 2,
+        CELL_SIZE * 2
+      );
+    }
+  });
+
+  ctx.globalAlpha = 1;
+};
+
 // Draw fitness heatmap overlay for genetic algorithm
 const drawFitnessHeatmap = (ctx, explorers, rows, cols) => {
   const cellVisits = {};
@@ -240,6 +283,8 @@ export const drawMaze = ({
   showHeatmap,
   showTopPerformers,
   showMetrics,
+  showPheromones,
+  pheromoneMap,
 }) => {
   if (!canvas || !maze || maze.length === 0) {
     return;
@@ -260,6 +305,11 @@ export const drawMaze = ({
       ctx.fillRect(cIdx * CELL_SIZE, rIdx * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     });
   });
+
+  // Draw pheromone trails for ant colony (if enabled)
+  if (showPheromones && algorithmType === 'ant' && pheromoneMap) {
+    drawPheromoneTrails(ctx, pheromoneMap, rows, cols);
+  }
 
   // Draw fitness heatmap for genetic algorithm (if enabled)
   if (showHeatmap && algorithmType === 'genetic' && explorers && explorers.length > 0) {

@@ -1,3 +1,5 @@
+import React from 'react';
+
 function GeneticControls({
   populationSize,
   generations,
@@ -8,37 +10,41 @@ function GeneticControls({
 }) {
   return (
     <div className="tuning">
-      <h3>Genetic Algorithm</h3>
       <label>
-        Population size
+        <span>Population Size: {populationSize}</span>
         <input
           type="number"
-          min="10"
-          step="5"
+          min="20"
+          max="200"
+          step="10"
           value={populationSize}
-          onChange={(event) => onPopulationChange(Number(event.target.value))}
+          onChange={e => onPopulationChange(Number(e.target.value))}
         />
       </label>
       <label>
-        Generations
+        <span>Generations: {generations}</span>
         <input
           type="number"
-          min="1"
+          min="20"
+          max="300"
           step="10"
           value={generations}
-          onChange={(event) => onGenerationsChange(Number(event.target.value))}
+          onChange={e => onGenerationsChange(Number(e.target.value))}
         />
       </label>
       <label>
-        Mutation rate
+        <span>Mutation Rate: {(mutationRate * 100).toFixed(1)}%</span>
         <input
-          type="number"
+          type="range"
           min="0.01"
-          max="1"
+          max="0.2"
           step="0.01"
           value={mutationRate}
-          onChange={(event) => onMutationRateChange(Number(event.target.value))}
+          onChange={e => onMutationRateChange(Number(e.target.value))}
         />
+        <small style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
+          Higher = more exploration
+        </small>
       </label>
     </div>
   );

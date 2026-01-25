@@ -1,42 +1,33 @@
+import React from 'react';
+
 function PsoControls({
   iterations,
   swarmSize,
-  iterationsPlaceholder,
-  swarmPlaceholder,
   onIterationsChange,
   onSwarmSizeChange,
 }) {
   return (
     <div className="tuning">
-      <h3>PSO Tuning</h3>
       <label>
-        Iterations
+        <span>Iterations: {iterations}</span>
         <input
           type="number"
-          min="1"
-          step="1"
-          value={iterations ?? ''}
-          placeholder={iterationsPlaceholder}
-          inputMode="numeric"
-          onChange={(event) => {
-            const { value } = event.target;
-            onIterationsChange(value === '' ? null : Number(value));
-          }}
+          min="50"
+          max="500"
+          step="10"
+          value={iterations}
+          onChange={e => onIterationsChange(Number(e.target.value))}
         />
       </label>
       <label>
-        Swarm size
+        <span>Swarm Size: {swarmSize}</span>
         <input
           type="number"
-          min="1"
-          step="1"
-          value={swarmSize ?? ''}
-          placeholder={swarmPlaceholder}
-          inputMode="numeric"
-          onChange={(event) => {
-            const { value } = event.target;
-            onSwarmSizeChange(value === '' ? null : Number(value));
-          }}
+          min="20"
+          max="200"
+          step="10"
+          value={swarmSize}
+          onChange={e => onSwarmSizeChange(Number(e.target.value))}
         />
       </label>
     </div>
