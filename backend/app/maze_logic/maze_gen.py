@@ -255,49 +255,6 @@ def _widen_corridors(
         grid[wall[0]][wall[1]] = 0
 
 
-def _add_chambers(
-    grid: Grid,
-    grid_span: int,
-    chamber_density: float,
-    rng: Random
-) -> None:
-    """
-    Add open chamber areas for strategic interest.
-    
-    Args:
-        chamber_density: 0.0-1.0, controls number of open chambers
-                        0.0 = no chambers
-                        0.5 = some chambers
-                        1.0 = many chambers
-    """
-    if chamber_density <= 0:
-        return
-    
-    # Number of chambers to create
-    num_chambers = int((grid_span // 10) * chamber_density)
-    
-    for _ in range(num_chambers):
-        # Random chamber center (must be on valid cell position)
-        center_r = rng.randrange(3, grid_span - 3)
-        center_c = rng.randrange(3, grid_span - 3)
-        
-        # Adjust to be on cell grid
-        if center_r % 2 == 0:
-            center_r += 1
-        if center_c % 2 == 0:
-            center_c += 1
-        
-        # Chamber size (2x2 or 3x3)
-        size = rng.choice([2, 3]) if chamber_density > 0.5 else 2
-        
-        # Clear the chamber area
-        for dr in range(-size, size + 1):
-            for dc in range(-size, size + 1):
-                r, c = center_r + dr, center_c + dc
-                if 1 <= r < grid_span - 1 and 1 <= c < grid_span - 1:
-                    grid[r][c] = 0
-
-
 def _count_junctions(grid: Grid) -> int:
     """Count cells with 3+ exits (decision points)."""
     junctions = 0
@@ -316,7 +273,6 @@ def generate_maze(
     dead_end_factor: float = 0.3,
     loop_density: float = 0.3,
     width_variation: float = 0.2,
-    chamber_density: float = 0.1,
 ) -> Grid:
     """
     Generate maze with comprehensive complexity controls.
@@ -331,7 +287,6 @@ def generate_maze(
         dead_end_factor: 0.0-1.0, number of dead-end branches
         loop_density: 0.0-1.0, number of alternate paths/loops
         width_variation: 0.0-1.0, corridor width diversity
-        chamber_density: 0.0-1.0, number of open chambers
     
     Complexity presets (when using master complexity parameter):
         0.0-0.2: EASY - Perfect maze, no dead ends, single solution path
@@ -390,13 +345,11 @@ def generate_maze(
         dead_end_factor = complexity * 0.6  # More dead ends = harder
         loop_density = 0.1 + (complexity * 0.3)  # Some loops help, but not too many
         width_variation = complexity * 0.3
-        chamber_density = max(0, complexity - 0.3) * 0.3  # Only at higher complexity
     
     # Add features in order of impact
     _create_strategic_loops(grid, grid_span, loop_density, rng)
     _create_dead_ends(grid, grid_span, dead_end_factor, rng)
     _widen_corridors(grid, grid_span, width_variation, rng)
-    _add_chambers(grid, grid_span, chamber_density, rng)
 
     return grid
 
@@ -449,42 +402,30 @@ def get_complexity_preset(preset_name: str) -> dict:
             'dead_end_factor': 0.0,
             'loop_density': 0.0,
             'width_variation': 0.0,
-            'chamber_density': 0.0,
         },
         'easy': {
             'complexity': 0.2,
             'dead_end_factor': 0.1,
             'loop_density': 0.15,
             'width_variation': 0.1,
-            'chamber_density': 0.0,
         },
         'medium': {
             'complexity': 0.5,
             'dead_end_factor': 0.3,
             'loop_density': 0.25,
             'width_variation': 0.2,
-            'chamber_density': 0.1,
         },
         'hard': {
             'complexity': 0.7,
             'dead_end_factor': 0.5,
             'loop_density': 0.35,
             'width_variation': 0.3,
-            'chamber_density': 0.2,
         },
         'extreme': {
             'complexity': 0.95,
             'dead_end_factor': 0.7,
             'loop_density': 0.4,
             'width_variation': 0.4,
-            'chamber_density': 0.3,
-        },
-        'algorithm_test': {
-            'complexity': 0.4,
-            'dead_end_factor': 0.4,  # Test dead-end handling
-            'loop_density': 0.3,     # Test multiple path exploration
-            'width_variation': 0.1,
-            'chamber_density': 0.15, # Test open space navigation
         },
     }
     
