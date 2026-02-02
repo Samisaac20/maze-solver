@@ -321,12 +321,14 @@ export const drawMaze = ({
 
   const progress = isRunning ? frameProgress : 1;
 
-  // Draw explorer paths
+  // Define start and goal positions early so we can use them
+  const start = solution?.start;
+  const goal = solution?.goal;
+
+  // Draw explorer paths (two-pass for proper layering)
   if (explorers && explorers.length > 0) {
-    explorers.forEach((explorer, index) => {
-      const hue = Math.round((index / explorers.length) * 360);
-      const color = `hsla(${hue}, 70%, 65%, 0.65)`;
-      drawPath(ctx, explorer.path, color, CELL_SIZE / 3, progress, 0.8);
+    const drawExplorer = (explorer, color) => {
+      drawPath(ctx, explorer.path, color, CELL_SIZE / 3, progress, 0.6);
       const visibleCount = Math.max(1, Math.floor(explorer.path.length * progress));
       const last = explorer.path?.[Math.min(visibleCount - 1, explorer.path.length - 1)];
       if (last) {
@@ -342,7 +344,33 @@ export const drawMaze = ({
         );
         ctx.fill();
       }
-    });
+    };
+    
+    // Pass 1: Draw failed (red) paths
+    for (let i = 0; i < explorers.length; i++) {
+      const explorer = explorers[i];
+      const reachedGoal = explorer.solved === true || 
+        (goal && explorer.path && explorer.path.length > 0 &&
+         explorer.path[explorer.path.length - 1][0] === goal[0] &&
+         explorer.path[explorer.path.length - 1][1] === goal[1]);
+      
+      if (!reachedGoal) {
+        drawExplorer(explorer, '#ef4444');
+      }
+    }
+    
+    // Pass 2: Draw successful (green) paths on top
+    for (let i = 0; i < explorers.length; i++) {
+      const explorer = explorers[i];
+      const reachedGoal = explorer.solved === true || 
+        (goal && explorer.path && explorer.path.length > 0 &&
+         explorer.path[explorer.path.length - 1][0] === goal[0] &&
+         explorer.path[explorer.path.length - 1][1] === goal[1]);
+      
+      if (reachedGoal) {
+        drawExplorer(explorer, '#10b981');
+      }
+    }
 
     // Draw velocity vectors for PSO (if enabled)
     if (showVelocities && algorithmType === 'pso') {
@@ -355,14 +383,12 @@ export const drawMaze = ({
     }
   }
 
-  // Draw best path
+  // Draw best path (solution path in green)
   if (bestPath && bestPath.length > 0) {
-    drawPath(ctx, bestPath, '#ff0000ff', CELL_SIZE / 2.5, progress, 1);
+    drawPath(ctx, bestPath, '#10b981', CELL_SIZE / 2.5, progress, 1);
   }
 
   // Draw start and goal
-  const start = solution?.start;
-  const goal = solution?.goal;
   if (start) {
     ctx.fillStyle = '#10b981';
     ctx.fillRect(start[1] * CELL_SIZE, start[0] * CELL_SIZE, CELL_SIZE, CELL_SIZE);

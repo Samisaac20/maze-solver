@@ -38,6 +38,64 @@ const EXPLANATIONS = {
   ],
 };
 
+// Helper function to calculate diversity (spread of population)
+const calculateDiversity = (explorers, maze) => {
+  if (!explorers || explorers.length < 2) return 0;
+  
+  const positions = explorers.map(e => {
+    if (e.position) return e.position;
+    if (e.path && e.path.length > 0) return e.path[e.path.length - 1];
+    return null;
+  }).filter(p => p !== null);
+  
+  if (positions.length < 2) return 0;
+  
+  let totalDistance = 0;
+  let comparisons = 0;
+  
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      const [r1, c1] = positions[i];
+      const [r2, c2] = positions[j];
+      const distance = Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(c1 - c2, 2));
+      totalDistance += distance;
+      comparisons++;
+    }
+  }
+  
+  const mazeSize = Math.sqrt(maze.length * (maze[0]?.length || 1));
+  return comparisons > 0 ? (totalDistance / comparisons) / mazeSize : 0;
+};
+
+// Helper function to calculate convergence (clustering around best)
+const calculateConvergence = (explorers, bestCandidate) => {
+  if (!explorers || explorers.length < 2 || !bestCandidate) return 0;
+  
+  const bestPos = bestCandidate.position || 
+                 (bestCandidate.path && bestCandidate.path.length > 0 ? 
+                  bestCandidate.path[bestCandidate.path.length - 1] : null);
+  
+  if (!bestPos) return 0;
+  
+  let totalDistance = 0;
+  let count = 0;
+  
+  explorers.forEach(e => {
+    const pos = e.position || (e.path && e.path.length > 0 ? e.path[e.path.length - 1] : null);
+    if (pos) {
+      const distance = Math.sqrt(
+        Math.pow(pos[0] - bestPos[0], 2) + 
+        Math.pow(pos[1] - bestPos[1], 2)
+      );
+      totalDistance += distance;
+      count++;
+    }
+  });
+  
+  const avgDistance = count > 0 ? totalDistance / count : 0;
+  return 1 / (1 + avgDistance);
+};
+
 function Sidebar({ state, update }) {
   const { algorithm, mazeSize, history, solution, mazeAnalysis } = state;
 
@@ -76,6 +134,31 @@ function Sidebar({ state, update }) {
     });
     return ((visited.size / (state.maze.length * (state.maze[0]?.length || 1))) * 100).toFixed(1);
   })() : '-';
+
+  // Try to get metrics from backend data
+  let diversityMetric = frame?.diversity ?? 
+                         frame?.metrics?.diversity ?? 
+                         solution?.diversity ?? 
+                         solution?.metrics?.diversity ?? 
+                         null;
+  
+  let convergenceMetric = frame?.convergence ?? 
+                           frame?.metrics?.convergence ?? 
+                           solution?.convergence ?? 
+                           solution?.metrics?.convergence ?? 
+                           null;
+  
+  // If metrics not provided by backend, calculate them client-side
+  if (diversityMetric === null && explorers.length > 0 && state.maze.length > 0) {
+    diversityMetric = calculateDiversity(explorers, state.maze);
+  }
+  
+  if (convergenceMetric === null && explorers.length > 0 && frameBest) {
+    convergenceMetric = calculateConvergence(explorers, frameBest);
+  }
+  
+  const diversity = typeof diversityMetric === 'number' ? diversityMetric.toFixed(3) : '-';
+  const convergence = typeof convergenceMetric === 'number' ? convergenceMetric.toFixed(3) : '-';
 
   const algorithmControls = (() => {
     switch (algorithm) {
@@ -127,7 +210,7 @@ function Sidebar({ state, update }) {
   })();
 
   return (
-    <div className="right-sidebar">
+    <>
       {/* 1. HOW IT WORKS - TOP */}
       {EXPLANATIONS[algorithm] && (
         <div className="sidebar-section">
@@ -155,6 +238,8 @@ function Sidebar({ state, update }) {
           <li>Frame: {currentFrameLabel}</li>
           <li>Fitness: {bestFitness}</li>
           <li>Coverage: {explorationCoverage}%</li>
+          <li>Diversity: {diversity}</li>
+          <li>Convergence: {convergence}</li>
         </ul>
       </div>
 
@@ -221,7 +306,7 @@ function Sidebar({ state, update }) {
           </ul>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

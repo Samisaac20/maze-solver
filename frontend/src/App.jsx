@@ -36,17 +36,20 @@ function App() {
         <p>Explainable AI visualization of evolutionary algorithms</p>
       </header>
 
-      <TopControls
-        state={state}
-        update={update}
-        runSolver={runSolver}
-        fetchMaze={fetchMaze}
-        handleReset={handleReset}
-      />
-
       <div className="main-content">
-        <Canvas state={state} />
-        <Sidebar state={state} update={update} />
+        <div className="left-column">
+          <TopControls
+            state={state}
+            update={update}
+            runSolver={runSolver}
+            fetchMaze={fetchMaze}
+            handleReset={handleReset}
+          />
+          <Sidebar state={state} update={update} />
+        </div>
+        <div className="right-column">
+          <Canvas state={state} />
+        </div>
       </div>
     </div>
   );

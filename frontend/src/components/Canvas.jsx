@@ -26,7 +26,6 @@ function Canvas({ state }) {
       showVelocities: state.showVelocities,
       showHeatmap: state.showHeatmap,
       showTopPerformers: state.showTopPerformers,
-      showMetrics: state.showMetrics,
       showPheromones: state.showPheromones,
       pheromoneMap: pheromoneMap,
     });
