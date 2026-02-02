@@ -40,7 +40,7 @@ const EXPLANATIONS = {
 
 function Sidebar({ state, update }) {
   const { algorithm, mazeSize, history, solution, mazeAnalysis } = state;
-  
+
   const algo = ALGORITHMS.find(a => a.id === algorithm);
   const isGenetic = algorithm === 'genetic';
   const isPso = algorithm === 'pso';

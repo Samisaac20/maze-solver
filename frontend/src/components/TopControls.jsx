@@ -22,6 +22,7 @@ function TopControls({ state, update, runSolver, fetchMaze, handleReset }) {
   const isPso = algorithm === 'pso';
   const isGenetic = algorithm === 'genetic';
   const isAnt = algorithm === 'ant';
+  const [xaiOpen, setXaiOpen] = React.useState(true);
 
   const statusText = state.runFailed ? 'Search failed.' :
     !state.solution ? 'Ready to start visualising the maze solver.' :
@@ -145,10 +146,13 @@ function TopControls({ state, update, runSolver, fetchMaze, handleReset }) {
           </div>
         </div>
 
-        {/* XAI Toggles */}
-        <div className="control-section">
-          <h3>XAI Options</h3>
-          <div className="xai-toggles">
+        {/* XAI Toggles - Collapsible */}
+        <div className="xai-section">
+          <div className="xai-header" onClick={() => setXaiOpen(!xaiOpen)}>
+            <h3>XAI Options</h3>
+            <span className={`xai-arrow ${xaiOpen ? 'open' : ''}`}>▼</span>
+          </div>
+          <div className={`xai-toggles ${xaiOpen ? 'open' : ''}`}>
             {isPso && (
               <label className="xai-toggle">
                 <input
