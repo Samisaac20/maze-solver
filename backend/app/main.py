@@ -151,32 +151,26 @@ def get_complexity_presets():
     "presets": {
       "trivial": {
         "description": "Perfect maze, easiest possible - single solution path",
-        "difficulty": "★☆☆☆☆",
         "recommended_for": "Testing basic pathfinding",
       },
       "easy": {
         "description": "Minimal complexity - few dead ends, some alternate paths",
-        "difficulty": "★★☆☆☆",
         "recommended_for": "Learning and debugging",
       },
       "medium": {
         "description": "Balanced complexity - good mix of features",
-        "difficulty": "★★★☆☆",
         "recommended_for": "General algorithm testing",
       },
       "hard": {
         "description": "Challenging navigation - many dead ends and loops",
-        "difficulty": "★★★★☆",
         "recommended_for": "Stress testing algorithms",
       },
       "extreme": {
         "description": "Maximum confusion - very complex maze",
-        "difficulty": "★★★★★",
         "recommended_for": "Advanced algorithm comparison",
       },
       "algorithm_test": {
         "description": "Optimized for testing algorithm behavior",
-        "difficulty": "★★★☆☆",
         "recommended_for": "XAI demonstrations and research",
       },
     }

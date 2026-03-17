@@ -17,7 +17,7 @@ This project is a dissertation work focused on **Explainable AI (XAI) for Evolut
 
 - Real-time streaming visualisation
 - Frame-by-frame playback with adjustable speed
-- Colour-coded trails (🟢 Green = successful, 🔴 Red = failed)
+- Colour-coded trails (Green = successful, Red = failed)
 - Live algorithm state updates
 
 #### XAI (Explainable AI) Features
@@ -82,9 +82,9 @@ python -m venv .venv
 
 # Activate virtual environment
 # On Windows:
-venv\Scripts\activate
+.venv\Scripts\activate
 # On macOS/Linux:
-source venv/bin/activate
+source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
