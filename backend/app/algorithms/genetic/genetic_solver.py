@@ -13,7 +13,6 @@ from .path_utils import (
   build_adjacency,
   build_distance_map,
   find_start_goal,
-  greedy_path_to_goal,
   random_path,
   simplify_path,
   biased_step,
@@ -201,13 +200,10 @@ def solve_maze_with_genetic(
   distance_map = build_distance_map(maze, goal)
   adjacency = build_adjacency(maze)
 
-  population: List[Chromosome] = []
-  if population_size > 1:
-    population.extend(
-      random_path(rng, start, goal, adjacency, distance_map, max_steps)
-      for _ in range(population_size - 1)
-    )
-  population.append(greedy_path_to_goal(start, goal, adjacency, distance_map))
+  population: List[Chromosome] = [
+    random_path(rng, start, goal, adjacency, distance_map, max_steps)
+    for _ in range(population_size)
+  ]
   best_overall: Individual | None = None
   frames: List[dict] = []
   last_population: List[Individual] = []

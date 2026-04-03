@@ -145,33 +145,6 @@ def random_path(
   return simplify_path(path)
 
 
-def greedy_path_to_goal(
-  start: Cell,
-  goal: Cell,
-  adjacency: Dict[Cell, List[Cell]],
-  distance_map: List[List[int]],
-) -> Path:
-  if distance_map[start[0]][start[1]] >= 10**9:
-    return [start]
-  path: Path = [start]
-  current = start
-  visited: set[Cell] = {start}
-  while current != goal:
-    neighbors = adjacency.get(current)
-    if not neighbors:
-      break
-    neighbors.sort(key=lambda cell: distance_map[cell[0]][cell[1]])
-    for neighbor in neighbors:
-      if neighbor not in visited and distance_map[neighbor[0]][neighbor[1]] < distance_map[current[0]][current[1]]:
-        path.append(neighbor)
-        visited.add(neighbor)
-        current = neighbor
-        break
-    else:
-      break
-  return path
-
-
 __all__ = [
   "Grid",
   "Cell",
@@ -183,5 +156,4 @@ __all__ = [
   "simplify_path",
   "biased_step",
   "random_path",
-  "greedy_path_to_goal",
 ]

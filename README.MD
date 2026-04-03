@@ -17,7 +17,7 @@ This project is a dissertation work focused on **Explainable AI (XAI) for Evolut
 
 - Real-time streaming visualisation
 - Frame-by-frame playback with adjustable speed
-- Colour-coded trails (Green = successful, Red = failed)
+- Colour-coded trails (Green = successful, aRed = failed)
 - Live algorithm state updates
 
 #### XAI (Explainable AI) Features
