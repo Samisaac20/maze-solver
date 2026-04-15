@@ -21,7 +21,6 @@ COMPLEXITY_DEFAULTS = {
   "dead_end_factor": 0.3,
   "loop_density": 0.3,
   "width_variation": 0.2,
-  "chamber_density": 0.1,
 }
 
 
